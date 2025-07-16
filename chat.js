@@ -1,170 +1,157 @@
-// chat.js - Chat functionality for AI Design Assistant
+// chat.js - Chatbot with username support
 
-// Configuration
 const CONFIG = {
-    API_URL: 'http://127.0.0.1:5000',
-    ENDPOINTS: {
-        GET_GRASSHOPPER: '/get_from_grasshopper',
-        SEND_GRASSHOPPER: '/send_to_grasshopper',
-        PROCESS_LLM: '/process_llm'  // You'll need to implement this endpoint
-    }
+    API_URL: 'http://localhost:5000',
+    ENDPOINT: '/chat'
 };
 
-// Chat Manager Class
 class ChatManager {
     constructor() {
         this.chatMessages = document.getElementById('chatMessages');
         this.messageInput = document.getElementById('messageInput');
         this.sendButton = document.getElementById('sendButton');
+        this.userId = null;
         
+        this.initializeLogin();
         this.initializeEventListeners();
+    }
+    
+    initializeLogin() {
+        const savedUsername = localStorage.getItem('username');
+        if (savedUsername) {
+            this.userId = savedUsername;
+            this.showChat();
+        } else {
+            this.showLogin();
+        }
+    }
+    
+    showLogin() {
+        document.getElementById('login-form').style.display = 'block';
+        document.getElementById('chat-area').style.display = 'none';
+        
+        const loginButton = document.getElementById('login-button');
+        const usernameInput = document.getElementById('username-input');
+        
+        loginButton.addEventListener('click', () => this.handleLogin());
+        usernameInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') this.handleLogin();
+        });
+    }
+    
+    handleLogin() {
+        const username = document.getElementById('username-input').value.trim();
+        if (username) {
+            this.userId = username;
+            localStorage.setItem('username', username);
+            this.showChat();
+        }
+    }
+    
+    showChat() {
+        document.getElementById('login-form').style.display = 'none';
+        document.getElementById('chat-area').style.display = 'flex';
+        document.getElementById('username-display').textContent = `Logged in as: ${this.userId}`;
+        document.getElementById('logout-button').style.display = 'block';
+        
+        // Add logout handler
+        document.getElementById('logout-button').addEventListener('click', () => {
+            localStorage.removeItem('username');
+            location.reload();
+        });
+        
+        this.messageInput.focus();
     }
 
     initializeEventListeners() {
-        this.sendButton.addEventListener('click', () => this.sendMessage());
+        this.sendButton.addEventListener('click', (e) => {
+            e.preventDefault();
+            this.sendMessage();
+        });
         this.messageInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
+                e.preventDefault();
                 this.sendMessage();
             }
         });
     }
 
     async sendMessage() {
+        console.log('1. Starting sendMessage');
         const message = this.messageInput.value.trim();
         if (!message) return;
 
-        // Clear input and disable button
         this.messageInput.value = '';
-        this.setButtonState(false, 'Sending...');
-
-        // Add user message
+        this.setButtonState(false);
+        
+        console.log('2. Adding user message');
         this.addMessage(message, 'user');
 
         try {
-            // Step 1: Get Grasshopper data
-            this.addMessage('Fetching data from Grasshopper...', 'assistant', 'loading');
-            const grasshopperData = await this.getGrasshopperData();
-            
-            this.removeLoadingMessage();
-            this.addMessage(`Retrieved area: ${grasshopperData} m²`, 'assistant');
+            console.log('3. Sending request to:', `${CONFIG.API_URL}${CONFIG.ENDPOINT}`);
+            const response = await fetch(`${CONFIG.API_URL}${CONFIG.ENDPOINT}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    message: message,
+                    user_id: this.userId
+                })
+            });
 
-            // Step 2: Process with LLM
-            const combinedMessage = `${message} The Area is ${grasshopperData} m2`;
-            this.addMessage('Processing your request...', 'assistant', 'loading');
+            console.log('4. Response received:', response.status);
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
             
-            const conceptText = await this.processWithLLM(combinedMessage);
-            this.removeLoadingMessage();
-
-            // Step 3: Send to Grasshopper
-            const result = await this.sendToGrasshopper(conceptText);
+            const contentType = response.headers.get("content-type");
+            if (!contentType || !contentType.includes("application/json")) {
+                throw new TypeError("Response wasn't JSON");
+            }
             
-            // Show response
-            this.addMessage(result.message || 'Concept sent to Grasshopper successfully!', 'assistant');
+            console.log('5. Parsing JSON');
+            const data = await response.json();
+            console.log('6. Data received:', data);
             
-            // Optional: Trigger 3D viewer update
-            this.triggerViewerUpdate(result);
+            this.addMessage(data.response, 'assistant');
+            console.log('7. Message added successfully');
 
         } catch (error) {
-            this.removeLoadingMessage();
-            this.addMessage(`Error: ${error.message}`, 'assistant', 'error');
-            console.error('Chat error:', error);
+            console.error('Error at step:', error);
+            this.addMessage('Sorry, I encountered an error. Please try again.', 'assistant', 'error');
         } finally {
-            this.setButtonState(true, 'Send');
+            this.setButtonState(true);
             this.messageInput.focus();
         }
-    }
-
-    async getGrasshopperData() {
-        const response = await fetch(`${CONFIG.API_URL}${CONFIG.ENDPOINTS.GET_GRASSHOPPER}`);
-        if (!response.ok) throw new Error('Failed to get Grasshopper data');
-        return await response.json();
-    }
-
-    async processWithLLM(message) {
-        // For development: simulate LLM response
-        // Remove this and uncomment the actual implementation below
-        await this.simulateDelay(1000);
-        return `Processed concept for: ${message}`;
-
-        /* Actual implementation:
-        const response = await fetch(`${CONFIG.API_URL}${CONFIG.ENDPOINTS.PROCESS_LLM}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: message })
-        });
-        if (!response.ok) throw new Error('Failed to process with LLM');
-        const data = await response.json();
-        return data.concept_text;
-        */
-    }
-
-    async sendToGrasshopper(conceptText) {
-        const response = await fetch(`${CONFIG.API_URL}${CONFIG.ENDPOINTS.SEND_GRASSHOPPER}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ concept_text: conceptText })
-        });
-        if (!response.ok) throw new Error('Failed to send to Grasshopper');
-        return await response.json();
     }
 
     addMessage(text, sender, type = '') {
         const messageDiv = document.createElement('div');
         messageDiv.className = `message ${sender}`;
-        if (type === 'loading') messageDiv.id = 'loadingMessage';
 
         const contentDiv = document.createElement('div');
         contentDiv.className = 'message-content';
-        if (type === 'loading') contentDiv.className += ' loading';
         if (type === 'error') contentDiv.className += ' error';
         contentDiv.textContent = text;
 
         const timeDiv = document.createElement('div');
         timeDiv.className = 'message-time';
-        timeDiv.textContent = this.formatTime(new Date());
+        timeDiv.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
         messageDiv.appendChild(contentDiv);
         messageDiv.appendChild(timeDiv);
-
         this.chatMessages.appendChild(messageDiv);
         this.scrollToBottom();
     }
 
-    removeLoadingMessage() {
-        const loading = document.getElementById('loadingMessage');
-        if (loading) loading.remove();
-    }
-
-    setButtonState(enabled, text) {
+    setButtonState(enabled) {
         this.sendButton.disabled = !enabled;
-        this.sendButton.textContent = text;
+        this.sendButton.textContent = enabled ? 'Send' : 'Sending...';
     }
 
     scrollToBottom() {
         this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
     }
-
-    formatTime(date) {
-        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    }
-
-    simulateDelay(ms) {
-        return new Promise(resolve => setTimeout(resolve, ms));
-    }
-
-    // This method can be called to update the 3D viewer
-    triggerViewerUpdate(data) {
-        // Dispatch custom event that the 3D viewer can listen to
-        window.dispatchEvent(new CustomEvent('grasshopperUpdate', { detail: data }));
-    }
 }
 
-// Initialize chat when DOM is loaded
+// Initialize
 document.addEventListener('DOMContentLoaded', () => {
     window.chatManager = new ChatManager();
 });
-
-// Export for use in other modules if needed
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = ChatManager;
-}

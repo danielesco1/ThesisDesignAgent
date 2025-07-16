@@ -1,4 +1,5 @@
 // viewer.js - Simple Three.js viewer with debugging
+import { GraphVisualizer } from "./GraphVisualizer.js";
 
 class Viewer3D {
     constructor(containerId) {
@@ -30,7 +31,7 @@ class Viewer3D {
             // Camera
             const aspect = this.container.clientWidth / this.container.clientHeight;
             this.camera = new THREE.PerspectiveCamera(45, aspect, 0.1, 100);
-            this.camera.position.set(5, 3, 5);
+            this.camera.position.set(15, 15, 15);
             this.camera.lookAt(0, 0, 0);
             
             // Renderer
@@ -51,8 +52,14 @@ class Viewer3D {
             this.controls.dampingFactor = 0.05;
             
             this.setupLights();
-            this.createCube();
+            // this.createCube();
             this.createGround();
+            // this.createCube();
+
+            
+
+            // Inside Viewer3D.init():
+            this.graphViz = new GraphVisualizer(this.scene, this.camera, this.renderer);
             
             // Handle resize
             window.addEventListener('resize', () => this.onResize());
@@ -152,6 +159,14 @@ class Viewer3D {
         this.renderer.render(this.scene, this.camera);
     }
 }
+
+Viewer3D.prototype.loadGraph = function(graphData) {
+  if (!this.graphViz) {
+    console.error("GraphVisualizer not initialized");
+    return;
+  }
+  this.graphViz.loadGraph(graphData);
+};
 
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
