@@ -148,35 +148,6 @@ class ChatUI {
         });
     }
 
-    // Drag functionality
-    dragStart(e) {
-        if (e.target === this.elements.header || e.target.parentNode === this.elements.header) {
-            this.state.isDragging = true;
-            const rect = this.elements.overlay.getBoundingClientRect();
-            this.state.dragOffset = {
-                x: e.clientX - rect.left,
-                y: e.clientY - rect.top
-            };
-        }
-    }
-
-    drag(e) {
-        if (!this.state.isDragging) return;
-        e.preventDefault();
-        
-        const x = e.clientX - this.state.dragOffset.x;
-        const y = e.clientY - this.state.dragOffset.y;
-        
-        this.elements.overlay.style.left = `${x}px`;
-        this.elements.overlay.style.top = `${y}px`;
-        this.elements.overlay.style.bottom = 'auto';
-        this.elements.overlay.style.transform = 'none';
-    }
-
-    dragEnd() {
-        this.state.isDragging = false;
-    }
-
     // Resize functionality
     resizeStart(e) {
         this.state.isResizing = true;

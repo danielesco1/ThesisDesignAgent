@@ -1,0 +1,469 @@
+/* styles/panels.css - Base panel styles and specific panel styles */
+
+/* Base Panel Styles */
+.panel {
+    background: var(--bg-secondary);
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}
+
+.panel-header {
+    background: var(--bg-tertiary);
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+}
+
+.panel-header h3 {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0;
+    color: var(--accent-primary);
+}
+
+.panel-content {
+    flex: 1;
+    overflow-y: auto;
+    position: relative;
+}
+
+/* Resize Handles */
+.resize-handle {
+    position: absolute;
+    background: transparent;
+    z-index: 10;
+    transition: background-color 0.2s;
+}
+
+.resize-handle:hover {
+    background: var(--accent-primary);
+}
+
+.resize-handle-e,
+.resize-handle-w {
+    width: 4px;
+    height: 100%;
+    cursor: ew-resize;
+}
+
+.resize-handle-e {
+    right: 0;
+    top: 0;
+}
+
+.resize-handle-w {
+    left: 0;
+    top: 0;
+}
+
+/* Chat Panel Specific */
+.chat-panel {
+    min-width: 280px;
+    max-width: 500px;
+}
+
+.chat-panel .panel-content {
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.chat-container {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.user-bar {
+    padding: 10px 15px;
+    background: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.user-info {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.user-info strong {
+    color: var(--text-primary);
+}
+
+.btn-logout {
+    font-size: 12px;
+    padding: 4px 12px;
+    background: var(--danger);
+    color: white;
+    border-radius: 4px;
+}
+
+.btn-logout:hover {
+    background: #c82333;
+}
+
+/* Login Form */
+.login-form {
+    padding: 30px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    justify-content: center;
+    height: 100%;
+    background: var(--bg-primary);
+}
+
+.login-form h4 {
+    text-align: center;
+    color: var(--accent-primary);
+    margin-bottom: 20px;
+}
+
+.login-form input {
+    width: 100%;
+    padding: 12px 16px;
+    font-size: 14px;
+}
+
+/* Chat Interface */
+.chat-interface {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.messages-container {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    background: var(--bg-primary);
+}
+
+.message {
+    margin-bottom: 16px;
+    animation: fadeIn 0.3s ease-in;
+}
+
+.message.user {
+    text-align: right;
+}
+
+.message-content {
+    display: inline-block;
+    padding: 10px 16px;
+    border-radius: 18px;
+    max-width: 80%;
+    word-wrap: break-word;
+    position: relative;
+}
+
+.message.user .message-content {
+    background: var(--accent-primary);
+    color: white;
+    border-bottom-right-radius: 4px;
+}
+
+.message.assistant .message-content {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    border-bottom-left-radius: 4px;
+}
+
+.message-content.error {
+    background: rgba(220, 53, 69, 0.1);
+    border-color: var(--danger);
+    color: var(--danger);
+}
+
+.message-time {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 4px;
+    padding: 0 16px;
+}
+
+/* JSON Display in Messages */
+.json-display {
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 12px;
+    line-height: 1.4;
+    white-space: pre;
+    overflow-x: auto;
+    margin: 8px 0;
+    padding: 12px;
+    background: #1e1e1e;
+    color: #d4d4d4;
+    border-radius: 6px;
+    max-height: 400px;
+}
+
+.btn-visualize {
+    margin-top: 8px;
+    padding: 8px 16px;
+    background: var(--accent-primary);
+    color: white;
+    border-radius: 4px;
+    font-size: 14px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.btn-visualize:hover {
+    background: var(--accent-hover);
+}
+
+/* Input Area */
+.input-area {
+    padding: 15px;
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
+.message-input {
+    flex: 1;
+    padding: 10px 16px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    color: var(--text-primary);
+    font-size: 14px;
+}
+
+.message-input:focus {
+    border-color: var(--accent-primary);
+    background: var(--bg-primary);
+}
+
+.btn-send {
+    padding: 10px 20px;
+    background: var(--accent-primary);
+    color: white;
+    border-radius: 20px;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.btn-send:hover:not(:disabled) {
+    background: var(--accent-hover);
+}
+
+.btn-send:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* Viewer Panel Specific */
+.viewer-panel {
+    background: var(--bg-primary);
+}
+
+.viewer-panel .panel-content {
+    padding: 0;
+}
+
+.viewer-container {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    background: #050505;
+}
+
+.viewer-controls {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    display: flex;
+    gap: 10px;
+    z-index: 100;
+}
+
+.btn-viewer {
+    padding: 8px 16px;
+    background: rgba(26, 26, 26, 0.9);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    backdrop-filter: blur(10px);
+    font-size: 13px;
+}
+
+.btn-viewer:hover {
+    background: rgba(94, 114, 228, 0.2);
+    border-color: var(--accent-primary);
+}
+
+.viewer-info {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    background: rgba(26, 26, 26, 0.8);
+    padding: 6px 12px;
+    border-radius: 4px;
+    backdrop-filter: blur(10px);
+}
+
+/* Properties Panel Specific */
+.properties-panel {
+    min-width: 250px;
+    max-width: 400px;
+}
+
+.properties-container {
+    padding: 20px;
+}
+
+.properties-section {
+    margin-bottom: 30px;
+}
+
+.properties-section h4 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--accent-primary);
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.property-content {
+    font-size: 13px;
+}
+
+.empty-state {
+    color: var(--text-muted);
+    font-style: italic;
+    margin: 10px 0;
+}
+
+.property-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(42, 42, 42, 0.5);
+}
+
+.property-item:last-child {
+    border-bottom: none;
+}
+
+.property-label {
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.property-value {
+    color: var(--text-primary);
+    text-align: right;
+}
+
+.property-breakdown {
+    margin-top: 8px;
+    padding-left: 16px;
+}
+
+.property-subitem {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+/* Actions */
+.actions-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.btn-action {
+    padding: 8px 16px;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    text-align: center;
+}
+
+.btn-action:hover {
+    background: var(--accent-primary);
+    color: white;
+    border-color: var(--accent-primary);
+}
+
+/* Settings */
+.settings-container {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.setting-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 0;
+}
+
+.setting-item span {
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.setting-item input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}
+
+.setting-item input[type="range"] {
+    width: 100px;
+    cursor: pointer;
+}
+
+/* Panel Animations */
+.panel {
+    animation: slideIn 0.3s ease-out;
+}
+
+.panel.closing {
+    animation: slideOut 0.3s ease-out;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateX(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes slideOut {
+    from {
+        opacity: 1;
+        transform: translateX(0);
+    }
+    to {
+        opacity: 0;
+        transform: translateX(-20px);
+    }
+}

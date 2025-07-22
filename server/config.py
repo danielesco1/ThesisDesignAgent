@@ -37,6 +37,18 @@ llama3 = [
         }
 ]
 
+# Notice how this model is running locally. Uses local server with LMStudio
+gemma3 = [
+        {
+            "model": "lmstudio-community/google/gemma-3-12b-it-GGUF", #change this to point to a new model
+            'api_key': 'any string here is fine',
+            'api_type': 'openai',
+            'base_url': "http://127.0.0.1:1234",
+            "cache_seed": random.randint(0, 100000),
+        }
+]
+
+
 
 qwen25 = [
         {
@@ -51,11 +63,21 @@ qwen25 = [
 cloudflare_model = "@hf/nousresearch/hermes-2-pro-mistral-7b"
 
 # Define what models to use according to chosen "mode"
-def api_mode (mode):
+def api_mode (mode, model=None):
     if mode == "local":
-        client = local_client
-        completion_model = llama3[0]['model']
-        embedding_model = local_embedding_model
+        if model == "llama3":
+            client = local_client
+            completion_model = llama3[0]['model']
+            embedding_model = local_embedding_model
+        if model == "gemma3":
+            client = local_client
+            completion_model = gemma3[0]['model']
+            embedding_model = local_embedding_model
+        if model == None:
+            print("No model specified, using llama3")
+            client = local_client
+            completion_model = llama3[0]['model']
+            embedding_model = local_embedding_model
         return client, completion_model, embedding_model
 
     
@@ -75,4 +97,4 @@ def api_mode (mode):
     else:
         raise ValueError("Please specify if you want to run local or openai models")
 
-client, completion_model, embedding_model = api_mode(mode)
+client, completion_model, embedding_model = api_mode(mode, model="gemma3")

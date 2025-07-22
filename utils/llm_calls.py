@@ -11,7 +11,7 @@ def query_llm(message, system_prompt=None):
     """
     # 1) Choose which system prompt to send
     default_system = """
-    Respond to the user query in a concise and informative manner.
+    Respond to the user query in a concise and informative manner. 
     """
     system_content = system_prompt.strip() if system_prompt else default_system.strip()
 
@@ -57,10 +57,19 @@ def classify_message(message):
     except json.JSONDecodeError:
         # fallback: assume false
         return {"is_graph_request": False}
+      
 # 1a) system prompt for classification
 CLASSIFY_SYSTEM_PROMPT = """
 You are a message classifier.  Given the user's message, decide whether they are asking 
-for a graph output (nodes & edges) or a regular chat answer.  
+for a graph output (nodes & edges) or a regular chat answer.
+
+example:
+user: "return Fallingwater into a graph relationship of the rooms"
+is_graph_request: true
+user: "what is the floor plan of the house?"
+is_graph_request: false
+user: "can you generate the graph of rooms for the famous house fallingwater by frank lloyd wright?"
+is_graph_request: true
 
 Output *only* JSON in this exact form, with no extra text:
 
