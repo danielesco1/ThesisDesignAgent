@@ -1,5 +1,6 @@
 // viewer.js - Simple Three.js viewer with debugging
-import { GraphVisualizer } from "./GraphVisualizer.js";
+import { GraphVisualizer } from "js/GraphVisualizer.js";
+
 
 class Viewer3D {
     constructor(containerId) {
@@ -50,6 +51,9 @@ class Viewer3D {
             this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
             this.controls.enableDamping = true;
             this.controls.dampingFactor = 0.05;
+            
+
+            
             
             this.setupLights();
             // this.createCube();

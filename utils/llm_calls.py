@@ -11,7 +11,9 @@ def query_llm(message, system_prompt=None):
     """
     # 1) Choose which system prompt to send
     default_system = """
-    Respond to the user query in a concise and informative manner. 
+    Respond to the user query in a concise manner that answers the question directly.   
+    If user is asking for a graph, return just the graph in JSON format with nodes and edges for the rooms in the house.
+    If user is asking for a layout of the house, return just the graph in json format graph of the connections of rooms and their relationships.
     """
     system_content = system_prompt.strip() if system_prompt else default_system.strip()
 
@@ -33,7 +35,7 @@ def query_llm(message, system_prompt=None):
     # 3) Clean up the output
     result = response.choices[0].message.content.strip()
     # remove stray markdown characters
-    for ch in ["```", "`", "*"]:
+    for ch in ["```", "`", "*","json"]:
         result = result.replace(ch, "")
     return result.strip()
 
