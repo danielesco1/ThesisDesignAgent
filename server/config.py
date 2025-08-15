@@ -1,100 +1,49 @@
-import random
 from openai import OpenAI
 from server.keys import *
 
+CLIENTS = {
+    "openai":     OpenAI(api_key=OPENAI_API_KEY),
+    "cloudflare": OpenAI(base_url=f"https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1",
+                         api_key=CLOUDFLARE_API_KEY),
+    "local":      OpenAI(base_url="http://127.0.0.1:1234/v1", api_key="lm-studio"),
+}
 
-# Mode
-mode = "local" # "local" or "openai" or "cloudflare"
+EMBED_MODELS = {
+    "openai": "text-embedding-3-small",
+    "cloudflare": "@cf/baai/bge-base-en-v1.5",
+    "local": "nomic-ai/nomic-embed-text-v1.5-GGUF",
+}
 
-# API
-local_client = OpenAI(base_url="http://localhost:1234/v1", api_key="lm-studio")
-openai_client = OpenAI(api_key=OPENAI_API_KEY)
-cloudflare_client = OpenAI(base_url = f"https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/v1", api_key = CLOUDFLARE_API_KEY)
+COMPLETION_MODELS = {
+    "openai": {  # OpenAI-hosted models only
+        "gpt-4o": "gpt-4o",
+    },
+    "cloudflare": {
+        "hermes-2-pro-7b": "@hf/nousresearch/hermes-2-pro-mistral-7b",
+        "gpt-oss-20b": "@cf/openai/gpt-oss-20b",  # hosted by Cloudflare
+    },
+    "local": {  # LM Studio (OpenAI-compatible) or similar
+        "llama3":   "lmstudio-community/Meta-Llama-3.1-8B-Instruct-GGUF",
+        "gemma3":   "lmstudio-community/google/gemma-3-12b-it-GGUF",
+        "gemma3n":  "lmstudio-community/google/gemma-3n-e4b",
+        "qwen25":   "RichardErkhov/abdulmannan-01_-_qwen-2.5-3b-finetuned-for-sql-generation-gguf",
+        "gpt-oss-20b": "openai/gpt-oss-20b",      # LM Studio supports this repo id
+    },
+}
 
+DEFAULT_COMPLETION = {"openai": "gpt-4o", "cloudflare": "hermes-2-pro-7b", "local": "llama3"}
 
-# Embedding Models
-local_embedding_model = "nomic-ai/nomic-embed-text-v1.5-GGUF"
-cloudflare_embedding_model = "@cf/baai/bge-base-en-v1.5"
-openai_embedding_model = "text-embedding-3-small"
+def api_mode(mode="local", model=None):
+    if mode not in CLIENTS:
+        raise ValueError("mode must be one of: local, openai, cloudflare")
+    if mode == "openai" and model and model.startswith("gpt-oss"):
+        raise ValueError("`gpt-oss` isn’t available via OpenAI’s hosted API. Use mode='local' or 'cloudflare'.")
+    models_for_mode = COMPLETION_MODELS[mode]
+    key = model or DEFAULT_COMPLETION[mode]
+    if key not in models_for_mode:
+        raise ValueError(f"Unknown model for {mode}. Try one of: {', '.join(models_for_mode)}")
+    return CLIENTS[mode], models_for_mode[key], EMBED_MODELS[mode]
 
-# Notice how this model is not running locally. It uses an OpenAI key.
-gpt4o = [
-        {
-            "model": "gpt-4o",
-            "api_key": OPENAI_API_KEY,
-            "cache_seed": random.randint(0, 100000),
-        }
-]
-
-# Notice how this model is running locally. Uses local server with LMStudio
-llama3 = [
-        {
-            "model": "lmstudio-community/Meta-Llama-3.1-8B-Instruct-GGUF", #change this to point to a new model
-            'api_key': 'any string here is fine',
-            'api_type': 'openai',
-            'base_url': "http://127.0.0.1:1234",
-            "cache_seed": random.randint(0, 100000),
-        }
-]
-
-# Notice how this model is running locally. Uses local server with LMStudio
-gemma3 = [
-        {
-            "model": "lmstudio-community/google/gemma-3-12b-it-GGUF", #change this to point to a new model
-            'api_key': 'any string here is fine',
-            'api_type': 'openai',
-            'base_url': "http://127.0.0.1:1234",
-            "cache_seed": random.randint(0, 100000),
-        }
-]
-
-
-
-qwen25 = [
-        {
-            "model": "RichardErkhov/abdulmannan-01_-_qwen-2.5-3b-finetuned-for-sql-generation-gguf", #change this to point to a new model
-            'api_key': 'any string here is fine',
-            'api_type': 'openai',
-            'base_url': "http://127.0.0.1:1234",
-            "cache_seed": random.randint(0, 100000),
-        }
-]
-# This is a cloudflare model
-cloudflare_model = "@hf/nousresearch/hermes-2-pro-mistral-7b"
-
-# Define what models to use according to chosen "mode"
-def api_mode (mode, model=None):
-    if mode == "local":
-        if model == "llama3":
-            client = local_client
-            completion_model = llama3[0]['model']
-            embedding_model = local_embedding_model
-        if model == "gemma3":
-            client = local_client
-            completion_model = gemma3[0]['model']
-            embedding_model = local_embedding_model
-        if model == None:
-            print("No model specified, using llama3")
-            client = local_client
-            completion_model = llama3[0]['model']
-            embedding_model = local_embedding_model
-        return client, completion_model, embedding_model
-
-    
-    if mode == "cloudflare":
-        client = cloudflare_client
-        completion_model = cloudflare_model
-        embedding_model = cloudflare_embedding_model
-        return client, completion_model, embedding_model
-    
-    elif mode == "openai":
-        client = openai_client
-        completion_model = gpt4o
-        completion_model = completion_model[0]['model']
-        embedding_model = openai_embedding_model
-
-        return client, completion_model, embedding_model
-    else:
-        raise ValueError("Please specify if you want to run local or openai models")
-
-client, completion_model, embedding_model = api_mode(mode, model="gemma3")
+# Example:
+# client, completion_model, embedding_model = api_mode("cloudflare", model="gpt-oss-20b")
+# client, completion_model, embedding_model = api_mode("local", model="gpt-oss-20b")

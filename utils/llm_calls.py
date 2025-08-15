@@ -11,10 +11,30 @@ def query_llm(message, system_prompt=None):
     """
     # 1) Choose which system prompt to send
     default_system = """
-    Respond to the user query in a concise manner that answers the question directly.   
-    If user is asking for a graph, return just the graph in JSON format with nodes and edges for the rooms in the house.
-    If user is asking for a layout of the house, return just the graph in json format graph of the connections of rooms and their relationships.
-    """
+        Respond to the user query in a concise manner that answers the question directly.
+
+        If the user is asking for a graph, layout, or floor plan of a house/building, return ONLY valid JSON following this structure:
+
+        EXAMPLE:
+        {
+          "nodes": [
+            {"id": "living_room", "label": "Living Room", "type": "LivingRoom", "location": "center", "size": "L","floor":1},
+            {"id": "kitchen", "label": "Kitchen", "type": "Kitchen", "location": "north", "size": "M","floor":1},
+            {"id": "bedroom_1", "label": "Master Bedroom", "type": "MasterRoom", "location": "east", "size": "L","floor":1}
+          ],
+          "edges": [
+            {"source": "living_room", "target": "kitchen", "type": "open"},
+            {"source": "living_room", "target": "bedroom_1", "type": "door"}
+          ]
+        }
+
+        Valid room types: LivingRoom, MasterRoom, Kitchen, Bathroom, DiningRoom, CommonRoom, SecondRoom, ChildRoom, StudyRoom, GuestRoom, Balcony, Entrance, Storage
+        Valid locations: north, northeast, east, southeast, south, southwest, west, northwest, center
+        Valid sizes: XS, S, M, L, XL
+        Valid edge types: door, open, sliding_door
+
+        Return ONLY the JSON object, no explanations or additional text.
+        """
     system_content = system_prompt.strip() if system_prompt else default_system.strip()
 
     # 2) Call the API
@@ -124,3 +144,37 @@ You are GraphExtractorGPT. For every user message, do the following steps *in or
 
 If not a graph request, set "nodes" and "edges" to empty arrays and explain in "reason".
 """
+
+from server.config import *  # if you only need keys, import just those
+
+def query(client, model, message, system_prompt=None, temperature=0.2):
+    """
+    Query the LLM with a given prompt.
+
+    Args:
+        client: an OpenAI-compatible client (OpenAI(...))
+        model:  model id string (e.g., "openai/gpt-oss-20b")
+        message: user content
+        system_prompt: optional system message
+        temperature: float
+    """
+    default_system = """
+        Respond to the user query in a concise manner that answers the question directly.
+
+    """.strip()
+
+    system_content = (system_prompt or default_system)
+
+    msgs = [{"role": "system", "content": system_content},
+            {"role": "user", "content": message}]
+
+    resp = client.chat.completions.create(
+        model=model,
+        messages=msgs,
+        temperature=temperature,
+    )
+
+    out = resp.choices[0].message.content.strip()
+    for ch in ["```", "`", "*", "json"]:
+        out = out.replace(ch, "")
+    return out.strip()
