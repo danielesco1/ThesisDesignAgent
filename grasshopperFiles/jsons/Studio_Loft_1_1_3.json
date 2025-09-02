@@ -1,0 +1,136 @@
+{
+  "name": "Studio Loft",
+  "description": "A single\u2011story loft that blends living and creative workspaces, maximizing natural light and flexible circulation.",
+  "families": "1 adult",
+  "profession": "Artist / Freelancer",
+  "location": "Berlin, Germany",
+  "climate": "Temperate",
+  "roof_type": "Flat concrete with green roof panels",
+  "facade_materials": "Reinforced glass curtain wall with timber cladding",
+  "floors": 1,
+  "reason": "The design prioritizes open flow between living and studio areas, natural daylight through a large south\u2011facing glazing system, and acoustic insulation for creative work. The single floor eliminates stairs, enhancing accessibility and flexibility.",
+  "nodes": [
+    {
+      "id": "entry",
+      "type": "entrance",
+      "center": [
+        5.0,
+        2.0
+      ],
+      "width": [
+        1.5,
+        2.0
+      ],
+      "height": 3.0,
+      "floor": 1,
+      "color": "#eaeaea",
+      "features": "sliding glass door"
+    },
+    {
+      "id": "living",
+      "type": "living_room",
+      "center": [
+        10.0,
+        4.0
+      ],
+      "width": [
+        6.0,
+        5.0
+      ],
+      "height": 3.0,
+      "floor": 1,
+      "color": "#fdfdfd",
+      "features": "large south window, built\u2011in shelving"
+    },
+    {
+      "id": "studio",
+      "type": "studio_workshop",
+      "center": [
+        18.0,
+        4.0
+      ],
+      "width": [
+        7.0,
+        5.0
+      ],
+      "height": 3.0,
+      "floor": 1,
+      "color": "#ffffff",
+      "features": "soundproof walls, skylight"
+    },
+    {
+      "id": "kitchen",
+      "type": "kitchen",
+      "center": [
+        10.0,
+        9.0
+      ],
+      "width": [
+        4.0,
+        3.0
+      ],
+      "height": 2.8,
+      "floor": 1,
+      "color": "#f5f5f5",
+      "features": "open layout with island"
+    },
+    {
+      "id": "bathroom",
+      "type": "bathroom",
+      "center": [
+        14.0,
+        9.0
+      ],
+      "width": [
+        2.5,
+        3.0
+      ],
+      "height": 2.6,
+      "floor": 1,
+      "color": "#e0e0e0",
+      "features": "walk\u2011in shower, double vanity"
+    },
+    {
+      "id": "bedroom",
+      "type": "bedroom_master",
+      "center": [
+        10.0,
+        14.0
+      ],
+      "width": [
+        4.0,
+        4.5
+      ],
+      "height": 3.0,
+      "floor": 1,
+      "color": "#fafafa",
+      "features": "built\u2011in wardrobe"
+    }
+  ],
+  "edges": [
+    [
+      "entry",
+      "living"
+    ],
+    [
+      "living",
+      "kitchen"
+    ],
+    [
+      "living",
+      "studio"
+    ],
+    [
+      "kitchen",
+      "bathroom"
+    ],
+    [
+      "bathroom",
+      "bedroom"
+    ]
+  ],
+  "site_area": {
+    "width": 25.0,
+    "height": 20.0
+  }
+}

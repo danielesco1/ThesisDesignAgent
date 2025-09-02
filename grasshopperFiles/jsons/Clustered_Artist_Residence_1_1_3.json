@@ -1,0 +1,116 @@
+{
+  "name": "Clustered Artist Residence",
+  "description": "A single\u2011story cluster house that balances natural light, passive cooling, and privacy for an artist freelancer.",
+  "families": "1 adult",
+  "profession": "Artist / Freelancer",
+  "location": "Coastal City, Country",
+  "climate": "Mediterranean",
+  "roof_type": "Green sloped roof with clay tiles",
+  "facade_materials": "Reclaimed cedar siding and glass panels",
+  "floors": 1,
+  "reason": "The cluster form creates shaded courtyards for cross\u2011ventilation, while the south\u2011facing living spaces capture light and views of the water feature. North\u2011side studio and bedroom provide privacy and natural breezes from trees.",
+  "nodes": [
+    {
+      "id": "entry",
+      "type": "entry_hall",
+      "center": [
+        10.0,
+        2.0
+      ],
+      "width": [
+        4.0,
+        3.5
+      ],
+      "height": 2.8,
+      "floor": 1,
+      "color": "#EDE6D9",
+      "features": "sliding glass doors to courtyard"
+    },
+    {
+      "id": "living",
+      "type": "living_room",
+      "center": [
+        10.0,
+        8.0
+      ],
+      "width": [
+        8.0,
+        7.5
+      ],
+      "height": 3.0,
+      "floor": 1,
+      "color": "#F4EAD6",
+      "features": "large south\u2011facing windows, skylight"
+    },
+    {
+      "id": "kitchen_dining",
+      "type": "kitchen_dining",
+      "center": [
+        15.0,
+        12.0
+      ],
+      "width": [
+        5.5,
+        6.0
+      ],
+      "height": 2.8,
+      "floor": 1,
+      "color": "#E3D4B7",
+      "features": "open layout, courtyard view"
+    },
+    {
+      "id": "studio",
+      "type": "studio_workshop",
+      "center": [
+        5.0,
+        20.0
+      ],
+      "width": [
+        6.5,
+        8.0
+      ],
+      "height": 3.2,
+      "floor": 1,
+      "color": "#D9C4A7",
+      "features": "north\u2011facing windows, natural light, storage loft"
+    },
+    {
+      "id": "bedroom",
+      "type": "private_bedroom",
+      "center": [
+        15.0,
+        28.0
+      ],
+      "width": [
+        5.0,
+        4.5
+      ],
+      "height": 2.8,
+      "floor": 1,
+      "color": "#C9B7A3",
+      "features": "small balcony overlooking courtyard"
+    }
+  ],
+  "edges": [
+    [
+      "entry",
+      "living"
+    ],
+    [
+      "living",
+      "kitchen_dining"
+    ],
+    [
+      "kitchen_dining",
+      "studio"
+    ],
+    [
+      "studio",
+      "bedroom"
+    ]
+  ],
+  "site_area": {
+    "width": 25.0,
+    "height": 35.0
+  }
+}

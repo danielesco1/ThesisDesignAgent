@@ -1,0 +1,136 @@
+{
+  "name": "Linear Waterview Studio",
+  "description": "A single\u2011story linear home oriented east\u2013west, integrating a central courtyard with water view, studio space for an artist, and privacy on the south side.",
+  "families": "Single adult (Artist / Freelancer)",
+  "profession": "Freelance Artist",
+  "location": "Portland, USA",
+  "climate": "Temperate Oceanic",
+  "roof_type": "Low\u2011sloped green roof with permeable membrane",
+  "facade_materials": "Reclaimed cedar cladding and operable timber louvers",
+  "floors": 1,
+  "reason": "The linear form follows prevailing north winds, places the studio near filtered light from northern trees, keeps the bedroom private on the south side, and uses a central courtyard to frame the water feature for an inviting threshold.",
+  "nodes": [
+    {
+      "id": "entry",
+      "type": "entry_hall",
+      "center": [
+        22.5,
+        2.5
+      ],
+      "width": [
+        3.0,
+        4.0
+      ],
+      "height": 2.8,
+      "floor": 1,
+      "color": "#EDE6D9",
+      "features": "sliding glass to courtyard"
+    },
+    {
+      "id": "courtyard",
+      "type": "courtyard",
+      "center": [
+        22.5,
+        10.0
+      ],
+      "width": [
+        8.0,
+        12.0
+      ],
+      "height": 2.4,
+      "floor": 1,
+      "color": "#C6D9B3",
+      "features": "water feature in center"
+    },
+    {
+      "id": "studio",
+      "type": "studio_workshop",
+      "center": [
+        22.5,
+        18.0
+      ],
+      "width": [
+        10.0,
+        8.0
+      ],
+      "height": 3.2,
+      "floor": 1,
+      "color": "#F4EAD6",
+      "features": "large skylight, built\u2011in storage"
+    },
+    {
+      "id": "kitchen_dining",
+      "type": "kitchen_dining",
+      "center": [
+        22.5,
+        26.0
+      ],
+      "width": [
+        12.0,
+        8.0
+      ],
+      "height": 2.9,
+      "floor": 1,
+      "color": "#D7C4A6",
+      "features": "open plan, north\u2011facing windows"
+    },
+    {
+      "id": "living",
+      "type": "living_room",
+      "center": [
+        22.5,
+        34.0
+      ],
+      "width": [
+        12.0,
+        10.0
+      ],
+      "height": 3.0,
+      "floor": 1,
+      "color": "#E8D4B9",
+      "features": "north\u2011facing glass wall"
+    },
+    {
+      "id": "bedroom",
+      "type": "bedroom_master",
+      "center": [
+        22.5,
+        42.0
+      ],
+      "width": [
+        10.0,
+        8.0
+      ],
+      "height": 3.1,
+      "floor": 1,
+      "color": "#D2BFA9",
+      "features": "private patio access"
+    }
+  ],
+  "edges": [
+    [
+      "entry",
+      "courtyard"
+    ],
+    [
+      "courtyard",
+      "studio"
+    ],
+    [
+      "studio",
+      "kitchen_dining"
+    ],
+    [
+      "kitchen_dining",
+      "living"
+    ],
+    [
+      "living",
+      "bedroom"
+    ]
+  ],
+  "site_area": {
+    "width": 25.0,
+    "height": 45.0
+  }
+}

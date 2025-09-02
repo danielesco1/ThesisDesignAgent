@@ -1,5 +1,6 @@
 from openai import OpenAI
 from server.keys import *
+import random
 
 CLIENTS = {
     "openai":     OpenAI(api_key=OPENAI_API_KEY),
@@ -15,8 +16,8 @@ EMBED_MODELS = {
 }
 
 COMPLETION_MODELS = {
-    "openai": {  # OpenAI-hosted models only
-        "gpt-4o": "gpt-4o",
+    "openai": {  # OpenAI-hosted models only    
+            "gpt-4o": "gpt-4o",  
     },
     "cloudflare": {
         "hermes-2-pro-7b": "@hf/nousresearch/hermes-2-pro-mistral-7b",
@@ -26,23 +27,52 @@ COMPLETION_MODELS = {
         "llama3":   "lmstudio-community/Meta-Llama-3.1-8B-Instruct-GGUF",
         "gemma3":   "lmstudio-community/google/gemma-3-12b-it-GGUF",
         "gemma3n":  "lmstudio-community/google/gemma-3n-e4b",
-        "qwen25":   "RichardErkhov/abdulmannan-01_-_qwen-2.5-3b-finetuned-for-sql-generation-gguf",
         "gpt-oss-20b": "openai/gpt-oss-20b",      # LM Studio supports this repo id
+        "qwen2.5": "lmstudio-community/Qwen2.5-VL-7B-Instruct-GGUF",
     },
 }
 
-DEFAULT_COMPLETION = {"openai": "gpt-4o", "cloudflare": "hermes-2-pro-7b", "local": "llama3"}
+DEFAULT_COMPLETION = {"openai": "gpt-4o", "cloudflare": "hermes-2-pro-7b", "local": "gpt-oss-20b"}
 
 def api_mode(mode="local", model=None):
+    # Check if mode is valid
     if mode not in CLIENTS:
         raise ValueError("mode must be one of: local, openai, cloudflare")
-    if mode == "openai" and model and model.startswith("gpt-oss"):
-        raise ValueError("`gpt-oss` isn’t available via OpenAI’s hosted API. Use mode='local' or 'cloudflare'.")
+    
+    # Get the client
+    client = CLIENTS[mode]
+    
+    # Get the available models for this mode
     models_for_mode = COMPLETION_MODELS[mode]
+    
+    # Use the specified model or the default
     key = model or DEFAULT_COMPLETION[mode]
+    
+    # Check if the model exists
     if key not in models_for_mode:
-        raise ValueError(f"Unknown model for {mode}. Try one of: {', '.join(models_for_mode)}")
-    return CLIENTS[mode], models_for_mode[key], EMBED_MODELS[mode]
+        raise ValueError(f"Unknown model '{key}' for {mode}. Try one of: {', '.join(models_for_mode.keys())}")
+    
+    # Get the model strings
+    completion_model = models_for_mode[key]
+    embedding_model = EMBED_MODELS[mode]
+    
+    return client, completion_model, embedding_model
+   
+
+# def api_mode(mode="local", model=None):
+#     if mode not in CLIENTS:
+#         raise ValueError("mode must be one of: local, openai, cloudflare")
+#     if mode == "openai":
+#         model = "gpt-4o"
+        
+#     if mode == "local" and model in COMPLETION_MODELS["local"]:
+#         models_for_mode = COMPLETION_MODELS[mode]
+    
+#     models_for_mode = COMPLETION_MODELS[mode]
+#     key = model or DEFAULT_COMPLETION[mode]
+#     if key not in models_for_mode:
+#         raise ValueError(f"Unknown model for {mode}. Try one of: {', '.join(models_for_mode)}")
+#     return CLIENTS[mode], models_for_mode[key], EMBED_MODELS[mode]
 
 # Example:
 # client, completion_model, embedding_model = api_mode("cloudflare", model="gpt-oss-20b")

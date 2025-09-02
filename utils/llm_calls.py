@@ -178,3 +178,50 @@ def query(client, model, message, system_prompt=None, temperature=0.2):
     for ch in ["```", "`", "*", "json"]:
         out = out.replace(ch, "")
     return out.strip()
+
+
+def query_vlm(client, model,image_path, message, system_prompt=None, temperature=0.2):
+    """
+    Query the LLM with a given prompt.
+
+    Args:
+        client: an OpenAI-compatible client (OpenAI(...))
+        model:  model id string (e.g., "openai/gpt-oss-20b")
+        message: user content
+        system_prompt: optional system message
+        temperature: float
+    """
+    default_system = """
+        Respond to the user query in a concise manner that answers the question directly.
+
+    """.strip()
+
+    system_content = (system_prompt or default_system)
+
+    messages=[
+        {"role": "system", "content": system_prompt},
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": image_path,
+                        "detail": "high"
+                    },
+                },
+                {"type": "text", "text": message},
+            ],
+        },
+    ]
+
+    resp = client.chat.completions.create(
+        model=model,
+        messages=messages,
+        temperature=temperature,
+    )
+
+    out = resp.choices[0].message.content.strip()
+    for ch in ["```", "`", "*", "json"]:
+        out = out.replace(ch, "")
+    return out.strip()

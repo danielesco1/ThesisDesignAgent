@@ -1,0 +1,120 @@
+{
+  "name": "Clustered Studio Home",
+  "description": "A single\u2011story cluster house that maximizes morning sun, cross ventilation and a water feature focal point for an artist freelancer.",
+  "families": "Single adult",
+  "profession": "Artist / Freelancer",
+  "location": "Riyadh, Saudi Arabia",
+  "climate": "Arid",
+  "roof_type": "Flat concrete with green roof panels",
+  "facade_materials": "Reinforced concrete with timber cladding",
+  "floors": 1,
+  "reason": "The design follows the cluster massing concept to create micro\u2011climates and uses a south entry that reveals the water feature. Northern living spaces enjoy shade from trees, while the studio near the water benefits from natural light and cooling breezes.",
+  "nodes": [
+    {
+      "id": "entry",
+      "type": "entry",
+      "center": [
+        5.0,
+        1.0
+      ],
+      "width": [
+        3.0,
+        2.0
+      ],
+      "height": 2.8,
+      "floor": 1,
+      "color": "#f4e9d6",
+      "features": "sliding glass door to courtyard"
+    },
+    {
+      "id": "living",
+      "type": "living_room",
+      "center": [
+        5.0,
+        4.0
+      ],
+      "width": [
+        6.0,
+        4.0
+      ],
+      "height": 3.0,
+      "floor": 1,
+      "color": "#e8d7b2",
+      "features": "large north window, skylight"
+    },
+    {
+      "id": "kitchen_dining",
+      "type": "kitchen_dining",
+      "center": [
+        9.5,
+        4.0
+      ],
+      "width": [
+        4.0,
+        3.5
+      ],
+      "height": 3.0,
+      "floor": 1,
+      "color": "#d6c8a7",
+      "features": "open plan, island with sink"
+    },
+    {
+      "id": "studio",
+      "type": "studio_workshop",
+      "center": [
+        2.5,
+        4.0
+      ],
+      "width": [
+        5.0,
+        4.0
+      ],
+      "height": 3.0,
+      "floor": 1,
+      "color": "#c9b79e",
+      "features": "north window, skylight, built\u2011in storage"
+    },
+    {
+      "id": "sleeping",
+      "type": "bedroom_small",
+      "center": [
+        5.0,
+        7.0
+      ],
+      "width": [
+        3.0,
+        2.5
+      ],
+      "height": 2.8,
+      "floor": 1,
+      "color": "#d4c6a9",
+      "features": "built\u2011in wardrobe"
+    }
+  ],
+  "edges": [
+    [
+      "entry",
+      "living"
+    ],
+    [
+      "living",
+      "kitchen_dining"
+    ],
+    [
+      "living",
+      "studio"
+    ],
+    [
+      "studio",
+      "sleeping"
+    ],
+    [
+      "kitchen_dining",
+      "sleeping"
+    ]
+  ],
+  "site_area": {
+    "width": 15.0,
+    "height": 10.0
+  }
+}
