@@ -10,6 +10,8 @@ from chat.chat_template import HTML_TEMPLATE
 import base64
 import os
 
+#updated function to encode image to data URI
+
 def encode_image_to_data_uri(path: str) -> str:
     """Read file and return a data URI (base64) that GPT-4 Vision can display."""
     ext = os.path.splitext(path)[1].lower().lstrip(".")
