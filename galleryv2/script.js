@@ -140,7 +140,7 @@ const XY = 1;
 const LEVEL_RISE = 3;
 const BG = 0xffffff;
 const EDGECOLOR = 0x000000;
-const FIT3D_PAD = 0.85;   // tweak to taste; 0.85..1.20
+const FIT3D_PAD = 0.90;   // tweak to taste; 0.85..1.20
 const FIT3D_ELEV = 0.80;  // vertical raise factor (was 0.8)
 const FIT_TIGHT = 0.60; 
 const HIGHLIGHT = 0xff00ff;
@@ -327,6 +327,8 @@ function buildVolumes(scene, data, pickables, register) {
     );
     box.position.set(x,y,z);
     box.userData.node = n;
+    box.castShadow = true;
+    box.receiveShadow = true;
     scene.add(box); disposables.push(box);
     pickables && pickables.push(box);
 
@@ -373,6 +375,7 @@ function buildWireframe(scene, data, pickables, register) {
       new THREE.MeshBasicMaterial({ color: nodeColor(n), transparent: true, opacity: .7, depthWrite: false })
     );
     plate.position.set(x, yBottom + 0.002, z);
+
     scene.add(plate); disposables.push(plate);
     const center = new THREE.Vector3(x,y,z);
     if (register) {
@@ -444,6 +447,8 @@ class SceneView {
     // WebGL renderer
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap; // nice soft penumbra
 
     // Scene & camera
     this.scene = new THREE.Scene();
@@ -1445,6 +1450,13 @@ if (overlapBtn){
       };
     });
 
+    // --- right-side slot for model tags (created once) ---
+    this._toolbarRight = document.querySelector('.viewer-toolbar .toolbar-right');
+    if (!this._toolbarRight) {
+      this._toolbarRight = document.createElement('div');
+      this._toolbarRight.className = 'toolbar-right';
+      document.querySelector('.viewer-toolbar')?.appendChild(this._toolbarRight);
+    }
 
     
     // Recenter button
@@ -1670,6 +1682,31 @@ if (overlapBtn){
     this.viewer.recenter();           // back to that saved fit state
   });
 
+    {
+    const toolbar = document.querySelector('.viewer-toolbar');
+    if (toolbar) {
+      // ensure the right-side slot exists
+      let right = toolbar.querySelector('.toolbar-right');
+      if (!right) {
+        right = document.createElement('div');
+        right.className = 'toolbar-right';
+        toolbar.appendChild(right);
+      }
+
+      // get models from filename parsing or precomputed house.models
+      const models = house.models || parseModelsFromFilename(house.filename || '');
+      const pill = (label, val) =>
+        val ? `<span class="model-tag"><span class="lbl">${esc(label)}</span>${esc(val)}</span>` : '';
+
+      const html = [ pill('VLM', models?.vlm), pill('LLM', models?.llm) ]
+        .filter(Boolean)
+        .join('');
+
+      right.innerHTML = html;
+      right.style.display = html ? 'inline-flex' : 'none';
+    }
+  }
+
   // ==== SIDEBAR (Tabbed) ====
   const m = $('#viewerMeta');
   const d = house.data || {};
@@ -1689,6 +1726,8 @@ if (overlapBtn){
       </div>
     `;
   };
+
+
 
   const renderGraphVerifier = (gv) => {
     if (!gv) return '';

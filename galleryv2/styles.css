@@ -58,7 +58,7 @@ body {
 
 /* SINGLE, merged rule */
 .modal-content{
-  width: min(2000px, 98vw);
+  width: min(2080px, 98vw);
   height: calc(100vh - 190px); /* keep this or switch to calc(...) — pick one */
   background: var(--panel);
   border: 1px solid var(--border);
@@ -83,7 +83,7 @@ body {
 /* Viewer fills available space; toolbar sits under it */
 .viewer{
   display: grid;
-  grid-template-columns: 400px 1fr 460px;  /* 3D | meta */
+  grid-template-columns: 460px 1fr 460px;  /* 3D | meta */
   gap: 16px;
   flex: 1 1 auto;   /* grow to fill modal-content */
   min-height: 0;    /* allow children to shrink */
@@ -102,6 +102,28 @@ body {
   background: rgba(11,14,19,.6);
   backdrop-filter: blur(6px);
 }
+
+/* right slot for model tags */
+.toolbar-right {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+/* small pill */
+.model-tag{
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(127,127,127,.10);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1;
+}
+.model-tag .lbl{ opacity:.65; margin-right:6px; font-variant-caps: all-small-caps; }
 
 /* Canvas area + labels overlay */
 .gl-wrap{
@@ -263,8 +285,8 @@ body {
 
 /* if you want chip-like tabs, keep both classes: .chip.tab */
 .tab-head .tab{appearance:none;border:0;border-radius:999px;cursor:pointer;
-  padding:6px 10px;font:inherit;line-height:1;
-  background:var(--chip-bg,#171a21);color:var(--text-2,#b7bec8);opacity:.85}
+  padding:6px 10px;font:inherit;line-height:2;
+  background:var(--chip-bg,#171a21);color:var(--text-2,#b7bec8);opacity:1}
 .tab-head .tab:hover{opacity:1}
 .tab-head .tab.active{background:var(--chip-active-bg,#232834);
   color:var(--text-1,#e6ecf3);opacity:1}
