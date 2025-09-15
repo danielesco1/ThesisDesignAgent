@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Plan Gallery (Minimal)</title>
+  <link rel="stylesheet" href="./styles.css"/>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/examples/jsm/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+  <!-- (optional perf) -->
+  <!-- <link rel="modulepreload" href="https://unpkg.com/three@0.160.0/build/three.module.js"> -->
+</head>
+<body>
+  <header class="header">
+    <div class="header-row">
+      <strong>Plan Gallery</strong>
+
+      <div class="view-toggles" role="group" aria-label="Preview Mode">
+        <button class="chip active" data-mode="plan" aria-pressed="true">Plan</button>
+        <button class="chip" data-mode="volumes" aria-pressed="false">Volumes</button>
+        <button class="chip" data-mode="wireframe" aria-pressed="false">Wireframe</button>
+        <button class="chip" data-mode="graph" aria-pressed="false">Graph</button>
+      </div>
+
+      <div class="controls">
+        <input id="search" class="search" type="search" placeholder="Search by name/location/file…"/>
+        <label class="range">
+          Rooms ≤ <span id="roomMaxVal">20</span>
+          <input id="roomMax" type="range" min="1" max="20" value="20"/>
+        </label>
+        <div class="chips" id="floorChips" role="group" aria-label="Floors">
+          <button class="chip active" data-floors="all" aria-pressed="true">All</button>
+          <button class="chip" data-floors="1" aria-pressed="false">1</button>
+          <button class="chip" data-floors="2" aria-pressed="false">2</button>
+          <button class="chip" data-floors="3+" aria-pressed="false">3+</button>
+        </div>
+        <button id="uploadBtn" class="btn">Upload JSONs</button>
+        <input id="fileInput" type="file" multiple accept=".json,application/json" webkitdirectory directory hidden />
+      </div>
+    </div>
+    <div class="stats">
+      <span>Total: <b id="totalCount">0</b></span>
+      <span>Filtered: <b id="filteredCount">0</b></span>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div id="gallery" class="grid"></div>
+  </main>
+
+  <!-- Loading bar -->
+  <div id="loader" class="loader hidden" aria-live="polite">
+    <div class="loader-row">
+      <span id="loaderText">Processing…</span>
+      <span id="loaderPct">0%</span>
+    </div>
+    <div class="loader-bar"><div id="loaderFill" class="loader-fill"></div></div>
+  </div>
+
+  <!-- Detail viewer modal -->
+  <div id="viewerModal" class="modal hidden" role="dialog" aria-modal="true" aria-label="3D Viewer">
+    <div class="modal-content">
+      <button id="closeModal" class="close" aria-label="Close">✕</button>
+      <div class="viewer">
+        <aside id="viewerRooms" class="rooms" aria-label="Rooms"></aside>
+        <div class="gl-wrap">
+          <canvas id="viewerCanvas"></canvas>
+          <!-- CSS2DRenderer overlay attaches here -->
+        </div>
+        <div class="meta" id="viewerMeta"></div>
+      </div>
+      <div class="viewer-toolbar">
+        <button class="chip active" data-vmode="volumes" aria-pressed="true">Volumes</button>
+        <button class="chip" data-vmode="wireframe" aria-pressed="false">Wireframe</button>
+        <button class="chip" data-vmode="plan" aria-pressed="false">Plan</button>
+        <button class="chip" data-vmode="graph" aria-pressed="false">Graph</button>
+        <button id="recenterBtn" class="chip" aria-pressed="false" title="Recenter (F or double-click)">Recenter</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Your app; this imports THREE/CSS2D/OrbitControls via the import map -->
+  <script type="module" src="./script.js"></script>
+</body>
+</html>

@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,viewport-fit=cover"
+    />
+    <title>House Graph Inspector</title>
+    <link rel="stylesheet" href="./styles.css" />
+
+    <!-- Import Map: pin exact versions and give short specifiers -->
+    <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/examples/jsm/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+    </script>
+  </head>
+
+  <body>
+    <!-- your app shell ... -->
+    <header class="app-header">
+      <div class="left">
+        <strong>House Graph Inspector</strong>
+        <input id="searchBar" type="search" placeholder="Search…" />
+      </div>
+      <div class="right">
+        <label class="theme">
+          <input id="themeToggle" type="checkbox" checked />
+          <span>Light theme</span>
+        </label>
+      </div>
+    </header>
+
+    <main id="app">
+      <!-- sidebar + gallery containers exactly as your modules expect -->
+      <aside id="sidebar"></aside>
+      <section id="galleryContainer">
+        <div id="galleryGrid" class="grid"></div>
+      </section>
+
+      <!-- modal -->
+      <div id="viewerModal" class="modal hidden">
+        <div class="modal-content">
+          <button id="closeModal" class="close" aria-label="Close">✕</button>
+          <div class="viewer">
+            <div class="viewer-toolbar">
+              <button class="view-btn" data-mode="plan">Plan</button>
+              <button class="view-btn" data-mode="volumes">Volumes</button>
+              <button class="view-btn" data-mode="wireframe">Wireframe</button>
+              <button class="view-btn" data-mode="graph">Graph</button>
+            </div>
+            <canvas id="viewerCanvas"></canvas>
+            <div class="viewer-nav"></div>
+          </div>
+          <aside class="detail">
+            <div id="houseProps"></div>
+            <div id="roomInfo"></div>
+          </aside>
+        </div>
+      </div>
+    </main>
+
+    <!-- Single module entry. No global <script src="...three..."> tags. -->
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>

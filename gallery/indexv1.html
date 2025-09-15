@@ -1,0 +1,881 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>House Graph Inspector</title>
+  <style>
+    /* ====== Base / Reset ====== */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #0a0a0a 0%, #1a0f1f 100%);
+      color: #e0e0e0;
+      min-height: 100vh;
+    }
+
+    /* ====== Header ====== */
+    .header {
+      background: rgba(15, 15, 15, 0.95);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid rgba(102, 126, 234, 0.2);
+      padding: 15px 30px;
+      position: sticky; top: 0; z-index: 100;
+    }
+    .header-content { max-width: 1600px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; gap: 20px; }
+    .logo { font-size: 1.4rem; font-weight: 700; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; white-space: nowrap; }
+    .stats-bar { display: flex; gap: 20px; font-size: 0.9rem; }
+    .stat-item { display: flex; align-items: center; gap: 5px; color: #888; }
+    .stat-value { color: #667eea; font-weight: 600; }
+    .header-controls { display: flex; gap: 15px; align-items: center; }
+    .search-bar { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 20px; padding: 8px 16px; width: 250px; color: #e0e0e0; font-size: 0.9rem; }
+    .btn { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 20px; padding: 8px 20px; cursor: pointer; font-weight: 600; font-size: 0.9rem; transition: all 0.3s; white-space: nowrap; }
+    .btn:hover { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4); }
+    .btn.secondary { background: rgba(255, 255, 255, 0.1); }
+    .btn.active { background: #667eea; }
+    #fileInput { display: none; }
+
+    /* ====== Layout ====== */
+    .main-container { display: flex; height: calc(100vh - 60px); }
+
+    /* ====== Sidebar ====== */
+    .sidebar { width: 280px; background: rgba(15, 15, 15, 0.6); border-right: 1px solid rgba(255, 255, 255, 0.05); display: flex; flex-direction: column; }
+    .sidebar-section { padding: 20px; border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
+    .section-title { font-size: 0.85rem; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px; }
+    .filter-group { margin-bottom: 15px; }
+    .filter-label { font-size: 0.85rem; color: #aaa; margin-bottom: 8px; display: block; }
+    .filter-options { display: flex; flex-wrap: wrap; gap: 8px; }
+    .filter-chip { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); padding: 5px 12px; border-radius: 15px; font-size: 0.8rem; cursor: pointer; transition: all 0.2s; }
+    .filter-chip:hover { background: rgba(255, 255, 255, 0.1); }
+    .filter-chip.active { background: #667eea; border-color: #667eea; }
+    .range-input { width: 100%; margin: 10px 0; }
+    .range-values { display: flex; justify-content: space-between; font-size: 0.75rem; color: #888; }
+
+    /* ====== Analytics ====== */
+    .analytics-panel { padding: 20px; }
+    .mini-chart { height: 60px; background: rgba(255, 255, 255, 0.02); border-radius: 8px; margin-bottom: 10px; position: relative; overflow: hidden; }
+    .chart-bars { display: flex; align-items: flex-end; height: 100%; padding: 10px; gap: 2px; }
+    .chart-bar { flex: 1; background: linear-gradient(to top, #667eea, #764ba2); border-radius: 2px 2px 0 0; opacity: 0.8; }
+
+    /* ====== Content ====== */
+    .content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+    /* Toolbar */
+    .toolbar { background: rgba(20, 20, 30, 0.4); padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
+    .view-controls { display: flex; gap: 10px; }
+    .view-btn { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); color: #e0e0e0; padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 0.85rem; transition: all 0.2s; }
+    .view-btn:hover { background: rgba(255, 255, 255, 0.1); }
+    .view-btn.active { background: #667eea; border-color: #667eea; }
+
+    /* ====== Gallery ====== */
+    .gallery-container { flex: 1; overflow-y: auto; padding: 20px; }
+    .gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; }
+    .asset-card { background: rgba(20, 20, 30, 0.6); border: 1px solid rgba(102, 126, 234, 0.15); border-radius: 12px; overflow: hidden; transition: all 0.3s; cursor: pointer; position: relative; height: 250px; }
+    .asset-card:hover { transform: translateY(-3px); box-shadow: 0 10px 30px rgba(102, 126, 234, 0.2); border-color: #667eea; }
+    .asset-card.selected { border-color: #764ba2; background: rgba(118, 75, 162, 0.1); }
+    .asset-card.compare { border: 2px solid #00ff88; }
+    .asset-preview { width: 100%; height: 150px; background: #0a0a0a; position: relative; }
+    .asset-canvas, .asset-preview img { width: 100%; height: 100%; display: block; }
+    .asset-info { padding: 12px; }
+    .asset-name { font-size: 0.9rem; font-weight: 600; margin-bottom: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .asset-meta { display: flex; gap: 10px; font-size: 0.75rem; color: #888; }
+    .compare-badge { position: absolute; top: 8px; right: 8px; background: #00ff88; color: #000; padding: 4px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: 600; }
+
+    /* ====== Batch actions ====== */
+    .batch-actions { background: rgba(102, 126, 234, 0.1); border: 1px solid #667eea; border-radius: 8px; padding: 10px 15px; display: none; align-items: center; gap: 15px; margin: 10px 20px; }
+    .batch-actions.active { display: flex; }
+    .batch-count { color: #667eea; font-weight: 600; }
+
+    /* ====== Comparison ====== */
+    .comparison-view { display: none; height: 100%; padding: 20px; }
+    .comparison-view.active { display: flex; flex-direction: column; }
+    .comparison-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .comparison-panels { display: flex; gap: 20px; flex: 1; }
+    .comparison-panel { flex: 1; background: rgba(20, 20, 30, 0.6); border: 1px solid rgba(102, 126, 234, 0.2); border-radius: 12px; display: flex; flex-direction: column; min-width: 0; }
+    .panel-header { padding: 15px; border-bottom: 1px solid rgba(255, 255, 255, 0.05); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .panel-viewer { flex: 1; position: relative; }
+    .panel-canvas { width: 100%; height: 100%; display: block; }
+    .panel-stats { padding: 15px; border-top: 1px solid rgba(255, 255, 255, 0.05); max-height: 200px; overflow-y: auto; }
+
+    .differences-panel { background: rgba(20, 20, 30, 0.8); border-radius: 12px; padding: 20px; margin-top: 20px; }
+    .diff-item { display: flex; justify-content: space-between; padding: 10px; margin-bottom: 8px; background: rgba(255,255,255,0.02); border-radius: 8px; gap: 10px; }
+    .diff-label { color: #aaa; font-size: 0.9rem; }
+    .diff-values { display: flex; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
+    .diff-value { font-weight: 600; }
+    .diff-value.different { color: #ff6b6b; }
+    .diff-value.same { color: #00ff88; }
+
+    /* ====== Cluster View ====== */
+    .cluster-view { padding: 20px; display: none; }
+    .cluster-view.active { display: block; }
+    .cluster-container { width: 100%; height: 600px; background: rgba(20, 20, 30, 0.4); border-radius: 12px; position: relative; }
+
+    /* ====== Misc ====== */
+    .loading-spinner { width: 40px; height: 40px; border: 3px solid rgba(102, 126, 234, 0.2); border-top-color: #667eea; border-radius: 50%; animation: spin 1s linear infinite; margin: 20px auto; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.02); }
+    ::-webkit-scrollbar-thumb { background: rgba(102, 126, 234, 0.3); border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <!-- ====== Header ====== -->
+  <header class="header">
+    <div class="header-content">
+      <div class="logo">🏗️ House Inspector</div>
+      <div class="stats-bar">
+        <div class="stat-item"><span>Total:</span><span class="stat-value" id="totalCount">0</span></div>
+        <div class="stat-item"><span>Filtered:</span><span class="stat-value" id="filteredCount">0</span></div>
+        <div class="stat-item"><span>Selected:</span><span class="stat-value" id="selectedCount">0</span></div>
+      </div>
+      <div class="header-controls">
+        <input type="text" class="search-bar" placeholder="Search..." id="searchBar" aria-label="Search" />
+        <button class="btn secondary" id="compareBtn" aria-pressed="false">Compare</button>
+        <button class="btn secondary" id="analyzeBtn">Analyze</button>
+        <button class="btn" id="uploadBtn">Upload JSONs</button>
+        <input type="file" id="fileInput" multiple accept=".json" />
+      </div>
+    </div>
+  </header>
+
+  <!-- ====== Main ====== -->
+  <div class="main-container">
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-section">
+        <div class="section-title">Filters</div>
+        <div class="filter-group">
+          <label class="filter-label" for="roomRange">Rooms (Max)</label>
+          <input type="range" class="range-input" id="roomRange" min="1" max="20" value="20" />
+          <div class="range-values"><span id="roomMin">1</span><span id="roomMax">20</span></div>
+        </div>
+        <div class="filter-group">
+          <label class="filter-label">Floors</label>
+          <div class="filter-options" role="group" aria-label="Floor filters">
+            <span class="filter-chip active" data-floors="all" role="button" aria-pressed="true">All</span>
+            <span class="filter-chip" data-floors="1" role="button" aria-pressed="false">1</span>
+            <span class="filter-chip" data-floors="2" role="button" aria-pressed="false">2</span>
+            <span class="filter-chip" data-floors="3+" role="button" aria-pressed="false">3+</span>
+          </div>
+        </div>
+        <div class="filter-group">
+          <label class="filter-label">Privacy</label>
+          <div class="filter-options" role="group" aria-label="Privacy filters">
+            <span class="filter-chip active" data-privacy="all" role="button" aria-pressed="true">All</span>
+            <span class="filter-chip" data-privacy="public" role="button" aria-pressed="false">Public</span>
+            <span class="filter-chip" data-privacy="semi" role="button" aria-pressed="false">Semi</span>
+            <span class="filter-chip" data-privacy="private" role="button" aria-pressed="false">Private</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="sidebar-section analytics-panel">
+        <div class="section-title">Distribution</div>
+        <label class="filter-label">Room Count</label>
+        <div class="mini-chart" id="roomChart"><div class="chart-bars" id="roomBars"></div></div>
+        <label class="filter-label">Floor Count</label>
+        <div class="mini-chart" id="floorChart"><div class="chart-bars" id="floorBars"></div></div>
+        <label class="filter-label">Complexity (edges/room)</label>
+        <div class="mini-chart" id="complexityChart"><div class="chart-bars" id="complexityBars"></div></div>
+      </div>
+    </aside>
+
+    <!-- Content -->
+    <main class="content">
+      <div class="toolbar">
+        <div class="view-controls">
+          <button class="view-btn active" data-view="grid" aria-pressed="true">Grid</button>
+          <button class="view-btn" data-view="list" aria-pressed="false">List</button>
+          <button class="view-btn" data-view="cluster" aria-pressed="false">Cluster</button>
+        </div>
+        <div class="view-controls">
+          <button class="view-btn" id="selectAllBtn">Select All</button>
+          <button class="view-btn" id="clearBtn">Clear</button>
+          <button class="view-btn" id="exportBtn">Export</button>
+        </div>
+      </div>
+
+      <div class="batch-actions" id="batchActions">
+        <span class="batch-count"><span id="batchCount">0</span> items selected</span>
+        <button class="btn secondary" id="compareBatch">Compare Selected</button>
+        <button class="btn secondary" id="analyzeBatch">Analyze Selected</button>
+        <button class="view-btn" id="deselectBatch">Deselect All</button>
+      </div>
+
+      <!-- Gallery (Grid/List) -->
+      <div class="gallery-container" id="galleryContainer">
+        <div class="gallery-grid" id="galleryGrid"></div>
+      </div>
+
+      <!-- Comparison View -->
+      <div class="comparison-view" id="comparisonView">
+        <div class="comparison-header">
+          <h2>Model Comparison</h2>
+          <button class="btn secondary" id="exitComparison">Exit Comparison</button>
+        </div>
+        <div class="comparison-panels" id="comparisonPanels"></div>
+        <div class="differences-panel" id="differencesPanel"></div>
+      </div>
+
+      <!-- Cluster View -->
+      <div class="cluster-view" id="clusterView">
+        <div class="cluster-container" id="clusterContainer"></div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Three.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+  <!-- App Script (ES Module) -->
+  <script type="module">
+    /**
+     * ================================================================
+     *  Utilities
+     * ================================================================
+     */
+    const $ = (sel, root=document) => root.querySelector(sel);
+    const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+
+    const uuid = () => (crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`);
+
+    const debounce = (fn, ms=150) => {
+      let t; return (...args) => { clearTimeout(t); t = setTimeout(()=>fn(...args), ms); };
+    };
+
+    /**
+     * ================================================================
+     *  Thumbnail Cache (Three.js renderer reused, with disposals)
+     * ================================================================
+     */
+    class ThumbnailCache {
+      constructor(maxSize = 50) {
+        this.cache = new Map();
+        this.maxSize = maxSize;
+        this.renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true, powerPreference: 'low-power' });
+        this.w = 200; this.h = 150;
+        this.renderer.setSize(this.w, this.h);
+      }
+
+      getThumbnail(houseId, houseData) {
+        if (this.cache.has(houseId)) return this.cache.get(houseId);
+        if (this.cache.size >= this.maxSize) this.cache.delete(this.cache.keys().next().value);
+        const url = this.generateThumbnail(houseData);
+        this.cache.set(houseId, url);
+        return url;
+      }
+
+      generateThumbnail(data) {
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x0a0a0a);
+        const camera = new THREE.PerspectiveCamera(50, this.w/this.h, 0.1, 1000);
+        camera.position.set(10, 10, 10); camera.lookAt(0, 0, 0);
+        const light = new THREE.AmbientLight(0xffffff, 0.6); scene.add(light);
+
+        // Build simple graph and collect disposables to free
+        const disposables = this.createSimplifiedGraph(scene, data);
+
+        this.renderer.render(scene, camera);
+        const url = this.renderer.domElement.toDataURL();
+
+        // dispose meshes/materials/geometries added
+        disposables.forEach(obj => {
+          if (obj.geometry) obj.geometry.dispose();
+          if (obj.material) obj.material.dispose();
+          scene.remove(obj);
+        });
+        return url;
+      }
+
+      createSimplifiedGraph(scene, data) {
+        const disposables = [];
+        const nodes = Array.isArray(data?.nodes) ? data.nodes : [];
+        const edges = Array.isArray(data?.edges) ? data.edges : [];
+        const id2node = new Map(nodes.map(n => [n.id, n]));
+
+        const sphereGeom = new THREE.SphereGeometry(0.3, 8, 8);
+        const sphereMat = new THREE.MeshBasicMaterial({ color: 0x667eea });
+
+        nodes.forEach(n => {
+          const mesh = new THREE.Mesh(sphereGeom, sphereMat);
+          const cx = (n.center?.[0] ?? 0) * 0.3;
+          const cy = (n.floor ?? 0) * 2;
+          const cz = (n.center?.[1] ?? 0) * 0.3;
+          mesh.position.set(cx, cy, cz);
+          scene.add(mesh);
+          disposables.push(mesh);
+        });
+
+        const lineMat = new THREE.LineBasicMaterial({ color: 0x667eea, opacity: 0.3, transparent: true });
+        const positions = [];
+        edges.forEach(([a,b]) => {
+          const A = id2node.get(a), B = id2node.get(b);
+          if (!A || !B) return;
+          positions.push(
+            (A.center?.[0] ?? 0) * 0.3, (A.floor ?? 0) * 2, (A.center?.[1] ?? 0) * 0.3,
+            (B.center?.[0] ?? 0) * 0.3, (B.floor ?? 0) * 2, (B.center?.[1] ?? 0) * 0.3
+          );
+        });
+        const edgeGeom = new THREE.BufferGeometry();
+        edgeGeom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+        const lines = new THREE.LineSegments(edgeGeom, lineMat);
+        scene.add(lines);
+        disposables.push(lines);
+        return disposables;
+      }
+    }
+
+    /**
+     * ================================================================
+     *  Comparison Engine (differences & similarities)
+     * ================================================================
+     */
+    class ComparisonEngine {
+      constructor() {
+        this.compareFields = [
+          'rooms','floors','edges','area','privacy_distribution','connectivity','centrality','clustering'
+        ];
+      }
+
+      compareHouses(houses) {
+        const differences = [], similarities = [];
+        for (const field of this.compareFields) {
+          const values = houses.map(h => this.getFieldValue(h, field));
+          const allSame = this._allEqual(values);
+          const variance = this._variance(values);
+          const item = { field, values, same: allSame, variance };
+          (allSame ? similarities : differences).push(item);
+        }
+        return { differences, similarities };
+      }
+
+      getFieldValue(house, field) {
+        const d = house.data;
+        switch (field) {
+          case 'rooms': return (d.nodes || []).length;
+          case 'floors': return Number.isFinite(d.floors) ? d.floors : 1;
+          case 'edges': return (d.edges || []).length;
+          case 'area': return (d.site_area?.width || 0) * (d.site_area?.height || 0);
+          case 'privacy_distribution': return this._privacyVector(d);
+          case 'connectivity': {
+            const nodes = Math.max(1,(d.nodes||[]).length);
+            return (d.edges||[]).length / nodes;
+          }
+          case 'centrality': return this._avgCentrality(d);
+          case 'clustering': return d.networkx_analysis?.global?.average_clustering || 0;
+          default: return null;
+        }
+      }
+
+      _privacyVector(d) {
+        const dist = { public: 0, semi_private: 0, private: 0 };
+        (d.nodes || []).forEach(n => { const k = (n.privacy_level || '').toLowerCase(); if (k in dist) dist[k]++; });
+        const total = Math.max(1, (d.nodes || []).length);
+        return [dist.public/total, dist.semi_private/total, dist.private/total];
+      }
+
+      _avgCentrality(d) {
+        const per = d.networkx_analysis?.per_node || {};
+        const vals = Object.values(per).map(o => o.betweenness_choice || 0);
+        if (!vals.length) return 0;
+        return vals.reduce((a,b)=>a+b,0) / vals.length;
+      }
+
+      _allEqual(arr) {
+        if (!arr.length) return true;
+        const first = JSON.stringify(arr[0]);
+        return arr.every(v => JSON.stringify(v) === first);
+      }
+
+      _variance(values) {
+        const flat = values.flat ? values.flat() : values;
+        if (!flat.length || flat.some(v => typeof v !== 'number')) return 0;
+        const mean = flat.reduce((a,b)=>a+b,0)/flat.length;
+        const sd = Math.sqrt(flat.reduce((s,v)=>s+Math.pow(v-mean,2),0)/flat.length);
+        return sd;
+      }
+    }
+
+    /**
+     * ================================================================
+     *  Gallery Manager (main controller)
+     * ================================================================
+     */
+    class GalleryManager {
+      constructor() {
+        // Data state
+        this.houses = [];
+        this.filteredHouses = [];
+        this.selectedHouses = new Set();
+        this.compareHouses = [];
+        this.searchTerm = '';
+
+        // Engines
+        this.thumbnailCache = new ThumbnailCache();
+        this.comparisonEngine = new ComparisonEngine();
+
+        // View state
+        this.currentView = 'grid';
+        this._rafIds = []; // active animation frames for comparison
+        this._panelRenderers = []; // keep renderers to dispose on exit
+
+        this.init();
+      }
+
+      /** Init & Event Wiring */
+      init() {
+        // Upload
+        $('#uploadBtn').addEventListener('click', () => $('#fileInput').click());
+        $('#fileInput').addEventListener('change', (e) => this.handleFileUpload(e));
+
+        // Drag & Drop anywhere
+        ['dragover','drop'].forEach(evt => document.body.addEventListener(evt, e => e.preventDefault()));
+        document.body.addEventListener('drop', (e) => {
+          const files = [...(e.dataTransfer?.files || [])].filter(f => f.name.toLowerCase().endsWith('.json'));
+          if (files.length) this.handleFileUpload({ target: { files } });
+        });
+
+        // Search
+        $('#searchBar').addEventListener('input', debounce((e) => { this.searchTerm = e.target.value.toLowerCase(); this.applyFilters(); }, 120));
+
+        // Filters (chips)
+        $$('.filter-chip[data-floors]').forEach(chip => chip.addEventListener('click', () => this._activateChip(chip, '[data-floors]')));
+        $$('.filter-chip[data-privacy]').forEach(chip => chip.addEventListener('click', () => this._activateChip(chip, '[data-privacy]')));
+        $('#roomRange').addEventListener('input', (e) => { $('#roomMax').textContent = e.target.value; this.applyFilters(); });
+
+        // View controls
+        $$('[data-view]').forEach(btn => btn.addEventListener('click', () => this.switchView(btn.dataset.view)));
+
+        // Selection controls
+        $('#selectAllBtn').addEventListener('click', () => this.selectAll());
+        $('#clearBtn').addEventListener('click', () => this.clearSelection());
+        $('#deselectBatch').addEventListener('click', () => this.clearSelection());
+
+        // Compare
+        $('#compareBtn').addEventListener('click', () => this.enterComparisonMode());
+        $('#compareBatch').addEventListener('click', () => this.compareSelected());
+        $('#exitComparison').addEventListener('click', () => this.exitComparisonMode());
+
+        // Export
+        $('#exportBtn').addEventListener('click', () => this.exportData());
+
+        // Analyze (stub)
+        $('#analyzeBtn').addEventListener('click', () => {
+          // Simple UX: scroll sidebar analytics into view
+          $('#sidebar').scrollTo({ top: $('#sidebar').scrollHeight, behavior: 'smooth' });
+        });
+
+        this.updateStats();
+      }
+
+      _activateChip(activeChip, selector) {
+        const group = activeChip.parentElement;
+        $$(selector, group).forEach(c => { c.classList.remove('active'); c.setAttribute('aria-pressed','false'); });
+        activeChip.classList.add('active');
+        activeChip.setAttribute('aria-pressed','true');
+        this.applyFilters();
+      }
+
+      /** File Handling */
+      async handleFileUpload(event) {
+        const files = Array.from(event.target.files);
+        const grid = $('#galleryGrid');
+        const loading = document.createElement('div'); loading.className = 'loading-spinner'; grid.appendChild(loading);
+        const batchSize = 10;
+        for (let i = 0; i < files.length; i += batchSize) {
+          const batch = files.slice(i, i + batchSize);
+          await Promise.all(batch.map(file => this.processFile(file)));
+        }
+        loading.remove();
+        this.applyFilters();
+        this.updateAnalytics();
+      }
+
+      processFile(file) {
+        return new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            try {
+              const data = JSON.parse(e.target.result);
+              this.addHouse(data, file.name);
+            } catch (err) {
+              console.warn('JSON parse error:', file.name);
+              this._toast(`Could not parse ${file.name}`);
+            }
+            resolve();
+          };
+          reader.readAsText(file);
+        });
+      }
+
+      addHouse(data, filename) {
+        const nodes = Array.isArray(data?.nodes) ? data.nodes : [];
+        const edges = Array.isArray(data?.edges) ? data.edges : [];
+        const house = {
+          id: uuid(),
+          name: data?.name || filename.replace(/\.json$/i, ''),
+          data: { ...data, nodes, edges },
+          filename,
+          rooms: nodes.length,
+          floors: Number.isFinite(data?.floors) ? data.floors : 1,
+          edges: edges.length,
+          location: data?.location || 'Unknown',
+        };
+        this.houses.push(house);
+      }
+
+      /** Filtering & Stats */
+      applyFilters() {
+        let filtered = [...this.houses];
+
+        // text search (name, location, filename)
+        if (this.searchTerm) {
+          const q = this.searchTerm;
+          filtered = filtered.filter(h =>
+            h.name.toLowerCase().includes(q) ||
+            (h.location||'').toLowerCase().includes(q) ||
+            (h.filename||'').toLowerCase().includes(q)
+          );
+        }
+
+        // rooms (max)
+        const maxRooms = parseInt($('#roomRange').value, 10);
+        filtered = filtered.filter(h => h.rooms <= maxRooms);
+
+        // floors
+        const floorsChip = $('.filter-chip[data-floors].active');
+        if (floorsChip && floorsChip.dataset.floors !== 'all') {
+          const f = floorsChip.dataset.floors;
+          filtered = filtered.filter(h => (f === '3+' ? h.floors >= 3 : h.floors === parseInt(f, 10)));
+        }
+
+        // privacy
+        const privacyChip = $('.filter-chip[data-privacy].active');
+        if (privacyChip && privacyChip.dataset.privacy !== 'all') {
+          const key = privacyChip.dataset.privacy; // 'public' | 'semi' | 'private'
+          filtered = filtered.filter(h => (h.data.nodes||[]).some(n => (n.privacy_level||'').toLowerCase().includes(key)));
+        }
+
+        this.filteredHouses = filtered;
+        this.renderGallery();
+        this.updateStats();
+      }
+
+      updateAnalytics() {
+        const histogram = (arr, bucketFn) => {
+          const h = {}; arr.forEach(x => { const b = bucketFn(x); h[b] = (h[b]||0) + 1; }); return h;
+        };
+        const roomsH = histogram(this.houses.map(h=>h.rooms), r => Math.floor(r/2)*2);
+        const floorsH = histogram(this.houses.map(h=>h.floors), f => f);
+        const compH = histogram(this.houses.map(h=> (h.edges||0)/Math.max(1,h.rooms)), c => (Math.floor(c*2)/2).toFixed(1));
+        const renderBars = (elId, H) => {
+          const bars = document.getElementById(elId); bars.innerHTML = '';
+          const max = Math.max(1, ...Object.values(H));
+          Object.entries(H).sort((a,b)=> +a[0]-+b[0]).forEach(([bucket,count]) => {
+            const bar = document.createElement('div'); bar.className = 'chart-bar';
+            bar.style.height = `${(count/max)*100}%`; bar.title = `${bucket}: ${count}`; bars.appendChild(bar);
+          });
+        };
+        renderBars('roomBars', roomsH);
+        renderBars('floorBars', floorsH);
+        renderBars('complexityBars', compH);
+      }
+
+      updateStats() {
+        $('#totalCount').textContent = this.houses.length;
+        $('#filteredCount').textContent = this.filteredHouses.length;
+        $('#selectedCount').textContent = this.selectedHouses.size;
+      }
+
+      /** Rendering (Grid + List) */
+      renderGallery() {
+        // Ensure the correct view is visible
+        if (this.currentView === 'cluster') this.switchView('grid');
+        $('#comparisonView').classList.remove('active');
+        $('#clusterView').classList.remove('active');
+        $('#galleryContainer').style.display = 'block';
+
+        const container = $('#galleryGrid');
+        container.innerHTML = '';
+
+        // Batched rendering for smoothness
+        const items = this.filteredHouses;
+        const batchSize = 24;
+        const renderBatch = (start) => {
+          const end = Math.min(start + batchSize, items.length);
+          for (let i = start; i < end; i++) container.appendChild(this.createCard(items[i]));
+          if (end < items.length) requestAnimationFrame(() => renderBatch(end));
+        };
+        renderBatch(0);
+      }
+
+      createCard(house) {
+        const isList = this.currentView === 'list';
+        const card = document.createElement('div');
+        card.className = 'asset-card';
+        card.style.height = isList ? '120px' : '250px';
+        if (this.selectedHouses.has(house.id)) card.classList.add('selected');
+        if (this.compareHouses.includes(house.id)) card.classList.add('compare');
+
+        const thumb = this.thumbnailCache.getThumbnail(house.id, house.data);
+
+        if (isList) {
+          // horizontal layout
+          card.style.display = 'grid';
+          card.style.gridTemplateColumns = '200px 1fr';
+          card.innerHTML = `
+            <div class="asset-preview"><img src="${thumb}" alt="${house.name}"></div>
+            <div class="asset-info" style="display:flex; flex-direction:column; gap:6px; justify-content:center;">
+              <div class="asset-name" title="${house.name}">${house.name}</div>
+              <div class="asset-meta">
+                <span>🏠 ${house.rooms}</span>
+                <span>📐 ${house.floors}F</span>
+                <span>🔗 ${house.edges}</span>
+                <span>📍 ${house.location}</span>
+              </div>
+            </div>`;
+        } else {
+          // grid card
+          card.innerHTML = `
+            <div class="asset-preview">
+              <img src="${thumb}" alt="${house.name}">
+              ${this.compareHouses.includes(house.id) ? '<div class="compare-badge">COMPARE</div>' : ''}
+            </div>
+            <div class="asset-info">
+              <div class="asset-name" title="${house.name}">${house.name}</div>
+              <div class="asset-meta">
+                <span>🏠 ${house.rooms}</span>
+                <span>📐 ${house.floors}F</span>
+                <span>🔗 ${house.edges}</span>
+              </div>
+            </div>`;
+        }
+
+        card.addEventListener('click', (e) => {
+          if (e.ctrlKey || e.metaKey) {
+            this.toggleSelection(house.id);
+          } else if (e.shiftKey) {
+            this.addToComparison(house.id);
+          } else {
+            this.openDetail(house); // stub
+          }
+        });
+        return card;
+      }
+
+      /** Selection & Batch */
+      toggleSelection(houseId) {
+        if (this.selectedHouses.has(houseId)) this.selectedHouses.delete(houseId); else this.selectedHouses.add(houseId);
+        this.updateBatchActions();
+        this.renderGallery();
+      }
+
+      selectAll() {
+        this.filteredHouses.forEach(h => this.selectedHouses.add(h.id));
+        this.updateBatchActions();
+        this.renderGallery();
+      }
+
+      clearSelection() {
+        this.selectedHouses.clear();
+        this.compareHouses = [];
+        this.updateBatchActions();
+        this.renderGallery();
+      }
+
+      updateBatchActions() {
+        const count = this.selectedHouses.size;
+        const el = $('#batchActions');
+        if (count > 0) { el.classList.add('active'); $('#batchCount').textContent = count; }
+        else el.classList.remove('active');
+        this.updateStats();
+      }
+
+      /** Compare Mode */
+      addToComparison(houseId) {
+        if (this.compareHouses.includes(houseId)) this.compareHouses = this.compareHouses.filter(id => id !== houseId);
+        else if (this.compareHouses.length < 4) this.compareHouses.push(houseId);
+        this.renderGallery();
+      }
+
+      compareSelected() {
+        this.compareHouses = Array.from(this.selectedHouses).slice(0, 4);
+        this.enterComparisonMode();
+      }
+
+      enterComparisonMode() {
+        if (this.compareHouses.length < 2) { alert('Select at least 2 houses to compare (Shift+Click or use batch).'); return; }
+        $('#galleryContainer').style.display = 'none';
+        $('#clusterView').classList.remove('active');
+        $('#comparisonView').classList.add('active');
+        this.renderComparison();
+      }
+
+      renderComparison() {
+        const panels = $('#comparisonPanels'); panels.innerHTML = '';
+        const houses = this.compareHouses.map(id => this.houses.find(h => h.id === id)).filter(Boolean);
+
+        houses.forEach(house => {
+          const panel = document.createElement('div'); panel.className = 'comparison-panel';
+          panel.innerHTML = `
+            <div class="panel-header" title="${house.name}">${house.name}</div>
+            <div class="panel-viewer"><canvas class="panel-canvas"></canvas></div>
+            <div class="panel-stats">
+              <div class="diff-item"><span class="diff-label">Rooms</span><span class="diff-value">${house.rooms}</span></div>
+              <div class="diff-item"><span class="diff-label">Floors</span><span class="diff-value">${house.floors}</span></div>
+              <div class="diff-item"><span class="diff-label">Edges</span><span class="diff-value">${house.edges}</span></div>
+              <div class="diff-item"><span class="diff-label">Connectivity</span><span class="diff-value">${(house.edges/Math.max(1,house.rooms)).toFixed(2)}</span></div>
+            </div>`;
+          panels.appendChild(panel);
+          this.render3DView(house, $('.panel-canvas', panel));
+        });
+
+        this.showDifferences(houses);
+      }
+
+      render3DView(house, canvas) {
+        const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+        const resize = () => { const { clientWidth: w, clientHeight: h } = canvas; renderer.setSize(w || 400, h || 300, false); };
+        resize();
+
+        const scene = new THREE.Scene(); scene.background = new THREE.Color(0x1a1a1a);
+        const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 1000);
+        camera.position.set(15, 15, 15); camera.lookAt(0,0,0);
+        const light = new THREE.AmbientLight(0xffffff, 0.8); scene.add(light);
+
+        // add graph (reuse thumbnail builder for simplicity)
+        this.thumbnailCache.createSimplifiedGraph(scene, house.data);
+
+        const ro = new ResizeObserver(() => { resize(); });
+        ro.observe(canvas);
+
+        const animate = () => {
+          const id = requestAnimationFrame(animate); this._rafIds.push(id);
+          const t = Date.now() * 0.001;
+          camera.position.x = 15 * Math.cos(t);
+          camera.position.z = 15 * Math.sin(t);
+          camera.lookAt(0,0,0);
+          // update aspect each frame in case of resize
+          const w = canvas.clientWidth || 400, h = canvas.clientHeight || 300;
+          camera.aspect = w / h; camera.updateProjectionMatrix();
+          renderer.render(scene, camera);
+        };
+        animate();
+
+        // keep references to clean up later
+        this._panelRenderers.push({ renderer, scene, ro });
+      }
+
+      showDifferences(houses) {
+        const panel = $('#differencesPanel');
+        const cmp = this.comparisonEngine.compareHouses(houses);
+        const fmt = v => Array.isArray(v) ? v.map(n => typeof n === 'number' ? n.toFixed(2) : n).join(' / ') : v;
+
+        let html = '<h3>Analysis</h3>';
+        if (cmp.differences.length) {
+          html += '<h4>Differences</h4>';
+          cmp.differences.forEach(diff => {
+            html += `<div class="diff-item"><span class="diff-label">${diff.field}</span><div class="diff-values">${diff.values.map(v => `<span class="diff-value different">${fmt(v)}</span>`).join('')}</div></div>`;
+          });
+        }
+        if (cmp.similarities.length) {
+          html += '<h4>Similarities</h4>';
+          cmp.similarities.forEach(sim => {
+            html += `<div class="diff-item"><span class="diff-label">${sim.field}</span><span class="diff-value same">${fmt(sim.values[0])}</span></div>`;
+          });
+        }
+        panel.innerHTML = html;
+      }
+
+      exitComparisonMode() {
+        // hide view
+        $('#galleryContainer').style.display = 'block';
+        $('#comparisonView').classList.remove('active');
+        // cancel RAFs
+        this._rafIds.forEach(id => cancelAnimationFrame(id));
+        this._rafIds = [];
+        // dispose renderers & observers
+        this._panelRenderers.forEach(({ renderer, scene, ro }) => {
+          ro.disconnect();
+          renderer.dispose();
+          // attempt to dispose scene children geometries/materials
+          scene.traverse(obj => {
+            if (obj.geometry) obj.geometry.dispose?.();
+            if (obj.material) {
+              if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose?.());
+              else obj.material.dispose?.();
+            }
+          });
+        });
+        this._panelRenderers = [];
+      }
+
+      /** View Switching */
+      switchView(view) {
+        // update button states
+        $$('[data-view]').forEach(btn => { btn.classList.toggle('active', btn.dataset.view === view); btn.setAttribute('aria-pressed', String(btn.dataset.view === view)); });
+        this.currentView = view;
+
+        const gallery = $('#galleryContainer');
+        const compare = $('#comparisonView');
+        const cluster = $('#clusterView');
+        gallery.style.display = 'none'; compare.classList.remove('active'); cluster.classList.remove('active');
+
+        if (view === 'cluster') {
+          this.renderClusterView();
+        } else { // grid or list
+          gallery.style.display = 'block';
+          this.renderGallery();
+        }
+      }
+
+      renderClusterView() {
+        $('#galleryContainer').style.display = 'none';
+        $('#comparisonView').classList.remove('active');
+        $('#clusterView').classList.add('active');
+
+        const container = $('#clusterContainer');
+        container.innerHTML = '<canvas id="clusterCanvas" width="1200" height="600"></canvas>';
+        const canvas = $('#clusterCanvas');
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0,0,canvas.width,canvas.height);
+
+        // simple 2D clustering based on rooms (x) and floors (y)
+        this.filteredHouses.forEach(house => {
+          const x = (house.rooms / 20) * (canvas.width - 20) + 10;
+          const y = (house.floors / 5) * (canvas.height - 20) + 10;
+          ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fillStyle = '#667eea'; ctx.fill();
+        });
+      }
+
+      /** Detail (stub for now) */
+      openDetail(house) {
+        console.log('Open detail for:', house.name, house);
+        // TODO: Replace with a modal showing full metadata, per-node table, etc.
+      }
+
+      /** Export */
+      exportData() {
+        const selected = Array.from(this.selectedHouses).map(id => this.houses.find(h => h.id === id)).filter(Boolean);
+        const data = selected.length ? selected : this.filteredHouses;
+        const json = JSON.stringify(data, null, 2);
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = 'house-data-export.json'; a.click();
+        URL.revokeObjectURL(url);
+      }
+
+      /** Tiny toast */
+      _toast(msg) {
+        const t = document.createElement('div');
+        t.textContent = msg; t.style.cssText = 'position:fixed;left:50%;top:20px;transform:translateX(-50%);background:#222;border:1px solid #444;color:#fff;padding:8px 12px;border-radius:8px;z-index:9999;opacity:0.95';
+        document.body.appendChild(t); setTimeout(()=>t.remove(), 2500);
+      }
+    }
+
+    // ====== Boot ======
+    document.addEventListener('DOMContentLoaded', () => { new GalleryManager(); });
+  </script>
+</body>
+</html>

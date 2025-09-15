@@ -1,0 +1,1002 @@
+import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
+/* --------------------------- Helpers --------------------------- */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const uuid = () => crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const num = (v, d=0)=> Number.isFinite(+v) ? +v : d;
+
+/* -------- Meta panel helpers (ADD THESE) -------- */
+const kv = (label, value, cls='') =>
+  (value ?? value === 0)
+    ? `<div class="kv ${cls}"><label>${esc(label)}</label><span title="${esc(value)}">${esc(value)}</span></div>`
+    : '';
+
+const pills = (arr = []) =>
+  `<div class="pill-row">${arr.filter(Boolean).map(t => `<span class="pill">${esc(t)}</span>`).join('')}</div>`;
+
+function parseReason(s = '') {
+  const obj = {};
+  s.split(';').forEach(part => {
+    const i = part.indexOf(':');
+    if (i < 0) return;
+    const key = part.slice(0, i).trim().toLowerCase().replace(/\W+/g, '_');
+    const val = part.slice(i + 1).trim().replace(/^"|"$/g, '');
+    obj[key] = val;
+  });
+  const splitEnum = t => (t || '')
+    .split(/\s*\d+\)\s*/g).map(x => x.trim()).filter(Boolean);
+  obj.moments_list         = splitEnum(obj.moments);
+  obj.climate_tactics_list = splitEnum(obj.climate_tactics);
+  obj.assumptions_list     = splitEnum(obj.assumptions);
+  return obj;
+}
+/* ----------------------------------------------- */
+
+/* --------------------------- Config --------------------------- */
+const XY = 0.3;
+const LEVEL_RISE = 3;
+const BG = 0xffffff;
+const EDGECOLOR = 0x000000;
+const FIT3D_PAD = 0.75;   // tweak to taste; 0.85..1.20
+const FIT3D_ELEV = 0.80;  // vertical raise factor (was 0.8)
+const HIGHLIGHT = 0xff00ff;
+
+const nodeColor = (n) => new THREE.Color(
+  n.color ||
+  (n.privacy_level === 'private' ? '#ff6b6b' :
+   n.privacy_level === 'semi_private' ? '#f5a623' : '#667eea')
+);
+
+/* ------------------------ Node labels ------------------------ */
+function makeLabel(text) {
+  const el = document.createElement('div');
+  el.className = 'node-label';
+  el.textContent = String(text ?? '');
+  return new CSS2DObject(el);
+}
+/* -------------------- Graph overlay (all views) -------------------- */
+// --- Graph helpers (single source of truth) ---
+function buildGraphOverlay(scene, data, yPlane = null, register) {
+  const disposables = [];
+
+  // nodes + labels
+  for (const n of (data.nodes || [])) {
+    const x = num(n.center?.[0], 0) * XY;
+    const z = num(n.center?.[1], 0) * XY;
+    const h = num(n.height ?? n.room_height ?? 3, 3);
+    const y0 = num(n.floor, 0) * LEVEL_RISE;
+    const cy = (yPlane !== null) ? (yPlane + 0.01) : (y0 + h * 0.5);
+    const center = new THREE.Vector3(x, cy, z);
+
+    const labelText = n.name ?? n.label ?? n.room ?? n.id ?? '';
+    if (labelText) {
+      const label = makeLabel(labelText);
+      label.position.set(x, cy + 0.35, z);
+      scene.add(label); disposables.push(label);
+      if (register) register(n.id, 'label', label, center);
+    }
+
+    const geom = (yPlane !== null)
+      ? new THREE.CircleGeometry(0.18, 24)
+      : new THREE.SphereGeometry(0.18, 18, 18);
+    if (yPlane !== null) geom.rotateX(-Math.PI / 2);
+
+    const marker = new THREE.Mesh(geom, new THREE.MeshBasicMaterial({ color: nodeColor(n) }));
+    marker.position.set(x, cy, z);
+    scene.add(marker); disposables.push(marker);
+    if (register) register(n.id, 'marker', marker, center);
+  }
+
+  // edges
+  if (Array.isArray(data.edges) && Array.isArray(data.nodes)) {
+    const id2 = new Map(data.nodes.map(n => [n.id, n]));
+    const pos = [];
+    for (const [a, b] of data.edges) {
+      const A = id2.get(a), B = id2.get(b);
+      if (!A || !B) continue;
+
+      const xA = num(A.center?.[0], 0) * XY, zA = num(A.center?.[1], 0) * XY;
+      const xB = num(B.center?.[0], 0) * XY, zB = num(B.center?.[1], 0) * XY;
+
+      let yA, yB;
+      if (yPlane !== null) {
+        yA = yB = yPlane + 0.01;
+      } else {
+        const hA = num(A.height ?? A.room_height ?? 3, 3);
+        const hB = num(B.height ?? B.room_height ?? 3, 3);
+        yA = num(A.floor, 0) * LEVEL_RISE + hA * 0.5;
+        yB = num(B.floor, 0) * LEVEL_RISE + hB * 0.5;
+      }
+      pos.push(xA, yA, zA, xB, yB, zB);
+    }
+    if (pos.length) {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      const lines = new THREE.LineSegments(g, new THREE.LineBasicMaterial({
+        color: 0xff00ff, transparent: true, opacity: 0.8
+      }));
+      scene.add(lines); disposables.push(lines);
+    }
+  }
+
+  return disposables;
+}
+
+// Convenience wrapper
+function buildGraphOnly(scene, data, register) {
+  return buildGraphOverlay(scene, data, null, register);
+}
+
+/* ------------------------ View builders ------------------------ */
+function buildPlan(scene, data) {
+  const disposables = [];
+  for (const n of data.nodes || []) {
+    const w = num(n.width?.[0] ?? n.width ?? n.size?.[0], 4) * XY;
+    const d = num(n.width?.[1] ?? n.depth ?? n.size?.[1], 4) * XY;
+    const x = num(n.center?.[0],0)*XY;
+    const z = num(n.center?.[1],0)*XY;
+
+    const g = new THREE.PlaneGeometry(Math.max(w,0.02), Math.max(d,0.02));
+    g.rotateX(-Math.PI/2);
+    const m = new THREE.MeshBasicMaterial({ color: nodeColor(n), transparent: true, opacity: 0.28 });
+    const mesh = new THREE.Mesh(g,m);
+    mesh.position.set(x, 0.001, z);
+    scene.add(mesh); disposables.push(mesh);
+
+  const e = new THREE.EdgesGeometry(new THREE.BoxGeometry(w, 0.01, d));
+  const ol = new THREE.LineSegments(e, new THREE.LineBasicMaterial({ color: EDGECOLOR, opacity: .5, transparent: true }));
+    ol.position.set(x, 0.001, z);
+    scene.add(ol); disposables.push(ol);
+  }
+  disposables.push(...buildGraphOverlay(scene, data, 0));
+  return disposables;
+}
+
+function buildVolumes(scene, data, pickables, register) {
+  const disposables = [];
+  for (const n of data.nodes || []) {
+    const w = num(n.width?.[0] ?? n.width ?? n.size?.[0], 4) * XY;
+    const d = num(n.width?.[1] ?? n.depth ?? n.size?.[1], 4) * XY;
+    const h = num(n.height ?? n.room_height ?? 3);
+    const x = num(n.center?.[0],0)*XY;
+    const z = num(n.center?.[1],0)*XY;
+    const y = num(n.floor,0)*LEVEL_RISE + h*0.5;
+
+    const box = new THREE.Mesh(
+      new THREE.BoxGeometry(Math.max(w,.05), Math.max(h,.05), Math.max(d,.05)),
+      new THREE.MeshStandardMaterial({ color: nodeColor(n), roughness: .95, metalness: 0, transparent: true, opacity: .95 })
+    );
+    box.position.set(x,y,z);
+    box.userData.node = n;
+    scene.add(box); disposables.push(box);
+    pickables && pickables.push(box);
+
+    const edges = new THREE.LineSegments(
+      new THREE.EdgesGeometry(box.geometry),
+      new THREE.LineBasicMaterial({ color: EDGECOLOR, transparent: true, opacity: .9 })
+    );
+    edges.position.copy(box.position);
+    scene.add(edges); disposables.push(edges);
+    const center = new THREE.Vector3(x,y,z);
+    if (register) {
+      register(n.id, 'mesh', box, center);
+      register(n.id, 'edge', edges, center);
+}
+  }
+  disposables.push(...buildGraphOverlay(scene, data, null));
+  return disposables;
+}
+
+function buildWireframe(scene, data, pickables, register) {
+  const disposables = [];
+  for (const n of data.nodes || []) {
+    const w = num(n.width?.[0] ?? n.width ?? n.size?.[0], 4) * XY;
+    const d = num(n.width?.[1] ?? n.depth ?? n.size?.[1], 4) * XY;
+    const h = num(n.height ?? n.room_height ?? 3);
+    const x = num(n.center?.[0],0)*XY;
+    const z = num(n.center?.[1],0)*XY;
+    const yBottom = num(n.floor,0)*LEVEL_RISE;
+    const y = yBottom + h*0.5;
+
+    const geometry = new THREE.BoxGeometry(Math.max(w,.05), Math.max(h,.05), Math.max(d,.05));
+    const edge = new THREE.LineSegments(
+      new THREE.EdgesGeometry(geometry),
+      new THREE.LineBasicMaterial({ color: EDGECOLOR, transparent: true, opacity: 1.0 })
+    );
+    edge.position.set(x,y,z);
+    scene.add(edge); disposables.push(edge);
+
+    // base plate with room color
+    const plateG = new THREE.PlaneGeometry(Math.max(w,.05), Math.max(d,.05));
+    plateG.rotateX(-Math.PI/2);
+    const plate = new THREE.Mesh(
+      plateG,
+      new THREE.MeshBasicMaterial({ color: nodeColor(n), transparent: true, opacity: .7, depthWrite: false })
+    );
+    plate.position.set(x, yBottom + 0.002, z);
+    scene.add(plate); disposables.push(plate);
+    const center = new THREE.Vector3(x,y,z);
+    if (register) {
+      // wireframe has no solid mesh; use edge as highlight target
+      register(n.id, 'edge', edge, center);
+    }
+
+    if (pickables) {
+      const proxy = new THREE.Mesh(geometry.clone(), new THREE.MeshBasicMaterial({ visible:false }));
+      proxy.position.copy(edge.position);
+      proxy.userData.node = n;
+      pickables.push(proxy);
+      scene.add(proxy); disposables.push(proxy);
+    }
+  }
+  disposables.push(...buildGraphOverlay(scene, data, null));
+  return disposables;
+}
+/* ------------------ Bounds + fit calculations ------------------ */
+function worldBounds(data) {
+  const nodes = data?.nodes || [];
+  if (!nodes.length) return { center:[0,0,0], radius: 1 };
+
+  let minX=+Infinity,minY=+Infinity,minZ=+Infinity, maxX=-Infinity,maxY=-Infinity,maxZ=-Infinity;
+  for (const n of nodes) {
+    const w = Math.max(num(n.width?.[0] ?? n.width ?? n.size?.[0], 4), 0.001);
+    const d = Math.max(num(n.width?.[1] ?? n.depth ?? n.size?.[1], 4), 0.001);
+    const h = Math.max(num(n.height ?? n.room_height ?? 3), 0.001);
+    const cx = num(n.center?.[0],0);
+    const cz = num(n.center?.[1],0);
+    const y0 = num(n.floor,0)*LEVEL_RISE;
+    const y1 = y0 + h;
+
+    minX = Math.min(minX, cx - w/2); maxX = Math.max(maxX, cx + w/2);
+    minZ = Math.min(minZ, cz - d/2); maxZ = Math.max(maxZ, cz + d/2);
+    minY = Math.min(minY, y0);       maxY = Math.max(maxY, y1);
+  }
+  const cx = ((minX+maxX)/2)*XY, cy=(minY+maxY)/2, cz=((minZ+maxZ)/2)*XY;
+  const spanX = Math.max(0.01, (maxX-minX)*XY);
+  const spanY = Math.max(0.01, (maxY-minY));
+  const spanZ = Math.max(0.01, (maxZ-minZ)*XY);
+  return { center:[cx,cy,cz], radius: Math.max(spanX, spanY, spanZ) * 0.6 };
+}
+
+function planBounds(data) {
+  const nodes = data?.nodes || [];
+  if (!nodes.length) return { min:{x:-1,z:-1}, max:{x:1,z:1} };
+  let minX=+Infinity,minZ=+Infinity,maxX=-Infinity,maxZ=-Infinity;
+  for (const n of nodes) {
+    const w = num(n.width?.[0] ?? n.width ?? n.size?.[0], 4);
+    const d = num(n.width?.[1] ?? n.depth ?? n.size?.[1], 4);
+    const x = num(n.center?.[0],0);
+    const z = num(n.center?.[1],0);
+    minX = Math.min(minX, x - w/2);
+    maxX = Math.max(maxX, x + w/2);
+    minZ = Math.min(minZ, z - d/2);
+    maxZ = Math.max(maxZ, z + d/2);
+  }
+  return { min:{x:minX*XY, z:minZ*XY}, max:{x:maxX*XY, z:maxZ*XY} };
+}
+
+/* --------------------------- SceneView --------------------------- */
+class SceneView {
+  constructor(canvas) {
+    this.canvas  = canvas;
+    this.glWrap  = canvas.closest('.gl-wrap') || canvas.parentElement; // for overlay + resize
+
+    // WebGL renderer
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+
+    // Scene & camera
+    this.scene = new THREE.Scene();
+    this.scene.background = new THREE.Color(BG);
+
+    this.camera = new THREE.PerspectiveCamera(60, this._aspect(), 0.1, 3000);
+    this.camera.position.set(20, 20, 20);
+
+    // Controls attach to renderer DOM
+    this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+    this._setControlsDefaults();
+
+    // We handle wheel zoom ourselves (momentum)
+    this.controls.enableZoom = false;
+    this.controls.zoomToCursor = false;
+
+    // ---- Selection & indexing (NEW) ----
+    this.roomIndex   = new Map();   // nodeId -> { meshes:[], edges:[], labels:[] }
+    this.selectedId  = null;
+
+    // Momentum-based wheel
+    this._zoomMomentum = 0;
+    this._wheelNormalize = (e) => {
+      const px = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaMode === 2 ? e.deltaY * 100 : e.deltaY;
+      const d  = THREE.MathUtils.clamp(px, -600, 600);
+      let k    = d / 1200;
+      if (e.ctrlKey) k *= 0.4; // pinch-zoom gentler
+      return k;
+    };
+    this._onWheel = (e) => { e.preventDefault(); e.stopPropagation(); this._zoomMomentum += this._wheelNormalize(e); };
+    this.renderer.domElement.addEventListener('wheel', this._onWheel, { passive: false });
+
+    // Lights & state
+    this.scene.add(new THREE.AmbientLight(0xffffff, 0.9));
+    this.pickables = [];
+    this._lastData = null;
+
+    // Labels overlay (inside .gl-wrap)
+    this._initLabelRenderer();
+
+    // ---- Left rooms list click-to-highlight (NEW) ----
+    this.roomsEl = $('#viewerRooms');
+    if (this.roomsEl) {
+      this.roomsEl.addEventListener('click',   e => {
+        const li = e.target.closest('[data-node]'); if (!li) return;
+        this.selectNode(li.dataset.node);              // no zoom
+      });
+      this.roomsEl.addEventListener('dblclick', e => {
+        const li = e.target.closest('[data-node]'); if (!li) return;
+        this.selectNode(li.dataset.node, true);        // zoom
+      });
+    }
+
+    // Start loop & resize
+    this._animate();
+    this._ro = new ResizeObserver(() => this._resize());
+    (this.glWrap || canvas) && this._ro.observe(this.glWrap || canvas);
+
+    // Recenter helpers
+    canvas.addEventListener('dblclick', () => this.recenter());
+    window.addEventListener('keydown', (e) => {
+      const modal = $('#viewerModal');
+      if (!modal || modal.classList.contains('hidden')) return;
+      if (e.key?.toLowerCase?.() === 'f') this.recenter();
+    });
+  }
+
+  _setControlsDefaults() {
+  const c = this.controls;
+
+  c.enableDamping = true;
+  c.dampingFactor = 0.08;
+
+  // make wheel steps smaller
+  c.zoomSpeed    = 1;     // try 0.015–0.03 to taste
+  c.panSpeed     = 0.6;
+  c.rotateSpeed  = 0.8;
+
+  c.screenSpacePanning = false;
+
+  // IMPORTANT: this is what causes big “jump to cursor” zooms
+  c.zoomToCursor = false;    // was true
+
+  c.minDistance = 0.5;
+  c.maxDistance = 500;
+  c.maxPolarAngle = Math.PI / 2.05;
+}
+
+_initLabelRenderer() {
+    this.labelRenderer = new CSS2DRenderer();
+    const w = this.canvas.clientWidth || 300;
+    const h = this.canvas.clientHeight || 200;
+    this.labelRenderer.setSize(w, h);
+
+    const el = this.labelRenderer.domElement;
+    el.style.position = 'absolute';
+    el.style.inset = '0';
+    el.style.pointerEvents = 'none';     // critical: don't block mouse events
+
+    const parent = this.canvas.parentElement || document.body;
+    if (getComputedStyle(parent).position === 'static') {
+      parent.style.position = 'relative';
+    }
+    parent.appendChild(el);
+  }
+
+_applyZoomStep(k) {
+  if (!k) return;
+
+  // Convert small k into multiplicative scale and clamp it tightly per frame.
+  const scale = THREE.MathUtils.clamp(Math.exp(k), 0.93, 1.07); // ~±7% per frame
+
+  if (this.camera.isOrthographicCamera) {
+    // Ortho zoom behaves inversely
+    const nextZoom = this.camera.zoom / scale;
+    const minZ = this.controls.minZoom ?? 0.4;
+    const maxZ = this.controls.maxZoom ?? 8;
+    this.camera.zoom = THREE.MathUtils.clamp(nextZoom, minZ, maxZ);
+    this.camera.updateProjectionMatrix();
+  } else {
+    // Move camera along view vector smoothly
+    const dir = new THREE.Vector3().subVectors(this.camera.position, this.controls.target);
+    const len = dir.length();
+    const newLen = THREE.MathUtils.clamp(len * scale, this.controls.minDistance, this.controls.maxDistance);
+    dir.setLength(newLen);
+    this.camera.position.copy(this.controls.target).add(dir);
+  }
+}
+
+  _aspect() { return (this.canvas.clientWidth || 1) / (this.canvas.clientHeight || 1); }
+
+  _resize() {
+  const w = this.canvas.clientWidth || 300;
+  const h = this.canvas.clientHeight || 200;
+  this.camera.aspect = w / h;
+  this.camera.updateProjectionMatrix();
+  this.renderer.setSize(w, h, false);
+  this.labelRenderer.setSize(w, h);         // <— keep labels in sync
+}
+
+_animate() {
+  const loop = () => {
+    this._raf = requestAnimationFrame(loop);
+    if (this._zoomMomentum) {
+      const step = this._zoomMomentum * 0.10;
+      this._zoomMomentum *= 0.85;
+      if (Math.abs(this._zoomMomentum) < 0.00015) this._zoomMomentum = 0;
+      this._applyZoomStep(step);
+    }
+    this.controls.update();
+    this.renderer.render(this.scene, this.camera);
+    this.labelRenderer.render(this.scene, this.camera); // <— render labels
+  };
+  loop();
+}
+  clear() {
+    this.pickables.length = 0;
+    const toDispose = [];
+    this.scene.traverse(o => { if (o !== this.scene) toDispose.push(o); });
+    toDispose.forEach(o=>{
+      o.parent?.remove(o);
+      o.geometry?.dispose?.();
+      (Array.isArray(o.material)?o.material:[o.material]).forEach(m=>m?.dispose?.());
+    });
+    this.scene.add(new THREE.AmbientLight(0xffffff, 0.9));
+  }
+
+  /* ---- Fit + control ranges ---- */
+  _applyClipAndDistance(radiusLike) {
+  const c = this.controls;
+  const r = Math.max(0.001, radiusLike);
+
+  // Gentler distance range (closer min, much lower max)
+  const min = Math.max(0.05, r * 0.01);   // was 0.1 / r*0.08
+  const max = Math.max(min * 6, r * 20);  // was min*8 / r*40
+
+  c.minDistance = min;
+  c.maxDistance = max;
+
+  // Tighter clip planes so close-ups don't clip and far fog isn't huge
+  if (this.camera.isPerspectiveCamera) {
+    this.camera.near = Math.max(0.005, r * 0.001);  // was 0.01 / r*0.01
+    this.camera.far  = Math.max(50, r * 200);       // was r*200
+    this.camera.updateProjectionMatrix();
+  }
+}
+
+
+  fit3D(data) {
+    this._lastData = data;
+    const b = worldBounds(data);
+    const [cx,cy,cz] = b.center;
+    const r = Math.max(0.001, b.radius);
+
+    if (!this.camera.isPerspectiveCamera) {
+      this.camera = new THREE.PerspectiveCamera(60, this._aspect(), 0.1, 3000);
+      this.controls.object = this.camera;
+      this._setControlsDefaults();
+    }
+
+    const fov = (this.camera.fov * Math.PI) / 180;
+    const aspect = this._aspect();
+    const hFov = 2 * Math.atan(Math.tan(fov/2) * aspect);
+    const dist = Math.max(
+      r / Math.tan(hFov / 2),
+      (r * 1.2) / Math.tan(fov / 2)
+    ) * FIT3D_PAD;
+
+    this.camera.position.set(cx + dist, cy + dist * FIT3D_ELEV, cz + dist);
+
+    this.controls.target.set(cx, cy, cz);
+    this.controls.enableRotate = true;
+    this.controls.enablePan = true;
+    this.controls.enableZoom = false;  // keep Orbit wheel OFF
+    this.controls.update();
+
+    this._applyClipAndDistance(r);
+    this.controls.saveState();
+  }
+
+  fitPlan(data) {
+    this._lastData = data;
+    const b = planBounds(data);
+    const cx = (b.min.x + b.max.x)/2;
+    const cz = (b.min.z + b.max.z)/2;
+    let w = (b.max.x - b.min.x) || 2;
+    let h = (b.max.z - b.min.z) || 2;
+    const pad = Math.max(0.08 * Math.max(w,h), 0.16);
+    w += pad*2; h += pad*2;
+
+    // ortho sized to canvas
+    const aspect = this._aspect();
+    let hw = w/2, hh = h/2;
+    if (hw/hh > aspect) hh = hw/aspect; else hw = hh*aspect;
+
+    const ortho = new THREE.OrthographicCamera(-hw, hw, hh, -hh, -100, 1000);
+    ortho.position.set(cx, 100, cz);
+    ortho.up.set(0, 0, -1);
+    ortho.lookAt(cx, 0, cz);
+
+    this.camera = ortho;
+    this.controls.object = ortho;
+    this._setControlsDefaults();
+    this.controls.enableRotate = false; // plan is top-down
+    this.controls.enablePan = true;
+    this.controls.enableZoom = false;   // keep Orbit wheel OFF
+    
+    this.controls.target.set(cx, 0, cz);
+    this.controls.update();
+    this.controls.minZoom = 0.5;
+    this.controls.maxZoom = 8;
+    this._applyClipAndDistance(Math.max(w,h));
+    this.controls.saveState();
+  }
+
+  recenter() {
+    if (!this._lastData) return;
+    if (this.camera.isOrthographicCamera) this.fitPlan(this._lastData);
+    else this.fit3D(this._lastData);
+  }
+
+  createRegistrar(){
+  this.roomIndex.clear();
+  return (id, kind, obj, centerVec) => {
+    if (!id) return;
+    let rec = this.roomIndex.get(id);
+    if (!rec){
+      rec = { meshes:[], edges:[], labels:[], center: centerVec ? centerVec.clone() : null };
+      this.roomIndex.set(id, rec);
+    }
+    if (centerVec && !rec.center) rec.center = centerVec.clone();
+    if (kind === 'mesh')  rec.meshes.push(obj);
+    if (kind === 'edge')  rec.edges.push(obj);
+    if (kind === 'label') rec.labels.push(obj);
+    };
+  }
+
+  selectNode(id, zoom = false){
+  this.selectedId = id;
+
+  // left list active state
+  $$('#viewerRooms .room-item').forEach(b => {
+    b.classList.toggle('active', b.dataset.node === id);
+  });
+
+  // dim others, highlight target
+  for (const [nodeId, rec] of this.roomIndex){
+    const active = nodeId === id;
+
+    rec.meshes.forEach(m=>{
+      const mat = m.material; if (!mat) return;
+      mat.transparent = true;
+      if (active){
+        mat.opacity = 1.0;
+        if ('emissive' in mat) mat.emissive.setHex(HIGHLIGHT); // magenta glow
+        // optional: also tint base color
+        // if ('color' in mat) mat.color.setHex(HIGHLIGHT);
+      } else {
+        mat.opacity = 0.18;
+        if ('emissive' in mat) mat.emissive.setHex(0x000000);
+      }
+      mat.needsUpdate = true;
+    });
+
+    rec.edges.forEach(l=>{
+      l.material.opacity = active ? 1.0 : 0.25;
+      l.material.color.setHex(active ? HIGHLIGHT : EDGECOLOR); // magenta edges when active
+      l.material.needsUpdate = true;
+    });
+
+    rec.labels.forEach(lbl=>{
+      lbl.element.classList.toggle('muted', !active);
+    });
+  }
+
+  // only zoom on request (e.g., double-click)
+  if (zoom){
+    const rec = this.roomIndex.get(id);
+    if (rec?.center){
+      const c = rec.center;
+      this.controls.target.copy(c);
+      const dir = new THREE.Vector3().subVectors(this.camera.position, this.controls.target);
+      const targetLen = Math.max(this.controls.minDistance * 1.4, dir.length() * 0.55);
+      dir.setLength(targetLen);
+      this.camera.position.copy(c).add(dir);
+    }
+  }
+}
+
+  clearSelection(){
+    this.selectedId = null;
+    for (const [,rec] of this.roomIndex){
+      rec.meshes.forEach(m=>{
+        const mat = m.material; if (!mat) return;
+        mat.transparent = true;
+        mat.opacity = 0.95;
+        if (mat.emissive) mat.emissive.setHex(0x000000);
+      });
+      rec.edges.forEach(l=>{
+        l.material.opacity = 0.9;
+        l.material.color.setHex(EDGECOLOR);
+      });
+      rec.labels.forEach(lbl=> lbl.element.classList.remove('muted'));
+    }
+    $$('#viewerRooms .room-item').forEach(b => b.classList.remove('active'));
+  }
+
+}
+
+/* --------------------------- Thumbnails --------------------------- */
+class Thumbnailer {
+  constructor(w=520, h=390) {
+    this.w = w; this.h = h;
+    this.renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true, powerPreference: 'low-power' });
+    this.renderer.setSize(w, h, false);
+  }
+  render(data, mode='plan') {
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(BG);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+    let camera;
+
+    if (mode === 'plan') {
+      const b = planBounds(data);
+      const cx = (b.min.x + b.max.x)/2, cz = (b.min.z + b.max.z)/2;
+      let w = (b.max.x - b.min.x) || 2, h = (b.max.z - b.min.z) || 2;
+      const pad = Math.max(0.08*Math.max(w,h), 0.16); w+=pad*2; h+=pad*2;
+      const aspect = this.w/this.h; let hw=w/2, hh=h/2; if (hw/hh>aspect) hh=hw/aspect; else hw=hh*aspect;
+      camera = new THREE.OrthographicCamera(-hw, hw, hh, -hh, -100, 1000);
+      camera.position.set(cx, 100, cz); camera.up.set(0,0,-1); camera.lookAt(cx,0,cz);
+      buildPlan(scene, data);
+    } else if (mode === 'wireframe') {
+      camera = new THREE.PerspectiveCamera(50, this.w/this.h, 0.1, 3000);
+      buildWireframe(scene, data);
+      const b = worldBounds(data);
+      const [cx,cy,cz] = b.center; const r = Math.max(0.001, b.radius);
+      const fov = (camera.fov*Math.PI)/180, aspect = this.w/this.h, hFov = 2*Math.atan(Math.tan(fov/2)*aspect);
+      const dist = Math.max(r/Math.tan(hFov/2),(r*1.2)/Math.tan(fov/2))*1.6;
+      camera.position.set(cx+dist, cy+dist*.8, cz+dist); camera.lookAt(cx,cy,cz);
+    } else if (mode === 'graph') {
+      camera = new THREE.PerspectiveCamera(50, this.w/this.h, 0.1, 3000);
+      buildGraphOnly(scene, data);
+      const b = worldBounds(data);
+      const [cx,cy,cz] = b.center; const r = Math.max(0.001, b.radius);
+      const fov = (camera.fov*Math.PI)/180, aspect = this.w/this.h, hFov = 2*Math.atan(Math.tan(fov/2)*aspect);
+      const dist = Math.max(r/Math.tan(hFov/2),(r*1.2)/Math.tan(fov/2))*1.6;
+      camera.position.set(cx+dist, cy+dist*.8, cz+dist); camera.lookAt(cx,cy,cz);
+    } else {
+      camera = new THREE.PerspectiveCamera(50, this.w/this.h, 0.1, 3000);
+      buildVolumes(scene, data);
+      const b = worldBounds(data);
+      const [cx,cy,cz] = b.center; const r = Math.max(0.001, b.radius);
+      const fov = (camera.fov*Math.PI)/180, aspect = this.w/this.h, hFov = 2*Math.atan(Math.tan(fov/2)*aspect);
+      const dist = Math.max(r/Math.tan(hFov/2),(r*1.2)/Math.tan(fov/2))*1.6;
+      camera.position.set(cx+dist, cy+dist*.8, cz+dist); camera.lookAt(cx,cy,cz);
+    }
+
+    this.renderer.render(scene, camera);
+    const url = this.renderer.domElement.toDataURL();
+    scene.traverse(o => {
+      o.geometry?.dispose?.();
+      (Array.isArray(o.material)?o.material:[o.material]).forEach(m=>m?.dispose?.());
+    });
+    return url;
+  }
+}
+
+/* --------------------------- App --------------------------- */
+class App {
+  constructor() {
+    this.houses = [];
+    this.filtered = [];
+    this.thumb = new Thumbnailer(520, 390);
+    this.viewer = null;
+
+    this.previewMode = 'plan';
+    this.viewerMode  = 'volumes';
+
+    this._wireEvents();
+    this._dnd();
+  }
+
+  _wireEvents() {
+    $('#uploadBtn').onclick = () => $('#fileInput').click();
+    $('#fileInput').onchange = (e) => this._handleFiles(e.target.files);
+
+    $('#search').oninput = () => this.applyFilters();
+    $('#roomMax').oninput = (e) => { $('#roomMaxVal').textContent = e.target.value; this.applyFilters(); };
+    $$('#floorChips .chip').forEach(ch => ch.onclick = () => {
+      $$('#floorChips .chip').forEach(x => { x.classList.remove('active'); x.setAttribute('aria-pressed','false'); });
+      ch.classList.add('active'); ch.setAttribute('aria-pressed','true');
+      this.applyFilters();
+    });
+
+    $$('.view-toggles .chip').forEach(btn => {
+      btn.onclick = () => {
+        $$('.view-toggles .chip').forEach(x => { x.classList.remove('active'); x.setAttribute('aria-pressed','false'); });
+        btn.classList.add('active'); btn.setAttribute('aria-pressed','true');
+        this.previewMode = btn.dataset.mode;
+        this.render();
+      };
+    });
+
+    $$('.viewer-toolbar .chip').forEach(btn => {
+      if (btn.id === 'recenterBtn') return; // recenter wired below
+      btn.onclick = () => {
+        $$('.viewer-toolbar .chip').forEach(x => { if (x.id!=='recenterBtn'){ x.classList.remove('active'); x.setAttribute('aria-pressed','false'); }});
+        btn.classList.add('active'); btn.setAttribute('aria-pressed','true');
+        this.viewerMode = btn.dataset.vmode;
+        if (this._openHouse) this._renderViewer(this._openHouse);
+      };
+    });
+
+    // Recenter button
+    $('#recenterBtn').onclick = () => this.viewer?.recenter();
+  }
+
+  _dnd() {
+    ['dragover','drop'].forEach(evt => document.addEventListener(evt, e => e.preventDefault()));
+    document.addEventListener('drop', (e) => {
+      const files = [...(e.dataTransfer?.files||[])].filter(f => f.name.toLowerCase().endsWith('.json'));
+      if (files.length) this._handleFiles(files);
+    });
+  }
+
+  // loader UI
+  _showLoader(total) {
+    $('#loader').classList.remove('hidden');
+    $('#loaderText').textContent = `Processing ${total} file${total>1?'s':''}…`;
+    $('#loaderPct').textContent = '0%';
+    $('#loaderFill').style.width = '0%';
+  }
+  _updateLoader(done, total) {
+    const pct = total ? Math.round((done / total) * 100) : 0;
+    $('#loaderPct').textContent = `${pct}%`;
+    $('#loaderFill').style.width = `${pct}%`;
+  }
+  _hideLoader() { $('#loader').classList.add('hidden'); }
+
+  async _handleFiles(files) {
+    const list = Array.from(files).filter(f => f.name.toLowerCase().endsWith('.json'));
+    if (!list.length) return;
+
+    this._showLoader(list.length);
+    let done = 0;
+    for (const f of list) {
+      try {
+        const text = await f.text();
+        this._ingest(JSON.parse(text), f.name);
+      } catch { console.warn('Bad JSON:', f.name); }
+      finally {
+        done++; this._updateLoader(done, list.length);
+        if (done % 12 === 0) await new Promise(r => requestAnimationFrame(r));
+      }
+    }
+    this._hideLoader();
+    this.applyFilters();
+  }
+
+  _ingest(data, filename) {
+    const nodes = Array.isArray(data?.nodes) ? data.nodes : [];
+    const edges = Array.isArray(data?.edges) ? data.edges : [];
+    this.houses.push({
+      id: uuid(),
+      name: data?.name || filename.replace(/\.json$/i,''), filename,
+      location: data?.location || '—',
+      rooms: nodes.length,
+      floors: Number.isFinite(data?.floors) ? data.floors : 1,
+      edges: edges.length,
+      data: { ...data, nodes, edges }
+    });
+  }
+
+  applyFilters() {
+    const q = $('#search').value.trim().toLowerCase();
+    const maxRooms = +$('#roomMax').value;
+    const floorChip = $('#floorChips .chip.active')?.dataset.floors || 'all';
+
+    let list = [...this.houses];
+    if (q) {
+      list = list.filter(h =>
+        h.name.toLowerCase().includes(q) ||
+        h.location.toLowerCase().includes(q) ||
+        h.filename.toLowerCase().includes(q)
+      );
+    }
+    list = list.filter(h => h.rooms <= maxRooms);
+    if (floorChip !== 'all') {
+      list = list.filter(h => floorChip === '3+' ? h.floors >= 3 : h.floors === +floorChip);
+    }
+
+    this.filtered = list;
+    $('#totalCount').textContent = this.houses.length;
+    $('#filteredCount').textContent = list.length;
+    this.render();
+  }
+
+  render() {
+    const grid = $('#gallery');
+    grid.innerHTML = '';
+    const items = this.filtered;
+    const batch = 18;
+    const draw = (i) => {
+      const end = Math.min(i + batch, items.length);
+      for (let k = i; k < end; k++) grid.appendChild(this._card(items[k]));
+      if (end < items.length) requestAnimationFrame(() => draw(end));
+    };
+    draw(0);
+  }
+
+  _card(h) {
+    const el = document.createElement('div');
+    el.className = 'card';
+    const thumbURL = this.thumb.render(h.data, this.previewMode);
+    el.innerHTML = `
+      <img class="thumb" src="${thumbURL}" alt="${esc(h.name)}"/>
+      <div class="info">
+        <div class="name" title="${esc(h.name)}">${esc(h.name)}</div>
+        <div class="meta">
+          <span>Rooms ${h.rooms}</span>
+          <span>${h.floors}F</span>
+          <span>${h.edges} edges</span>
+        </div>
+        <div class="meta"><span>${esc(h.location)}</span></div>
+      </div>
+    `;
+    el.onclick = () => this.openViewer(h);
+    return el;
+  }
+
+  _buildRoomsList(house){
+  const el = $('#viewerRooms');
+  if (!el) return;
+
+  const nodes = (house.data?.nodes || [])
+    .slice()
+    .sort((a,b)=> (a.floor??0)-(b.floor??0) || String(a.id).localeCompare(String(b.id)));
+
+  el.innerHTML = nodes.map(n=>{
+    const color = nodeColor(n).getStyle(); // e.g. "rgb(102, 126, 234)"
+    const title = n.id ?? n.type ?? 'room';
+    const sub   = `F${n.floor ?? 0} · ${n.type ?? 'room'}`;
+    
+    return `
+      <button class="room-item" data-node="${esc(n.id)}" title="${esc(title)}">
+        <span class="dot" style="--c:${esc(color)}"></span>
+        <div class="ri">
+          <div class="ri-top">${esc(title)}</div>
+          <div class="ri-sub">${esc(sub)}</div>
+        </div>
+      </button>`;
+  }).join('');
+  }
+
+  openViewer(house) {
+    this._openHouse = house;
+    this._buildRoomsList(house);
+    $('#viewerModal').classList.remove('hidden');
+    $('#closeModal').onclick = () => $('#viewerModal').classList.add('hidden');
+    document.addEventListener('keydown', function escOnce(e){
+      if (e.key === 'Escape') { $('#viewerModal').classList.add('hidden'); document.removeEventListener('keydown', escOnce); }
+    }, { once: true });
+
+    if (!this.viewer) this.viewer = new SceneView($('#viewerCanvas'));
+
+    // Ensure correct canvas size, then render & fit…
+    this.viewer._resize();
+    this._renderViewer(house);          // calls fit3D/fitPlan + saveState
+
+    // …and one more pass next frame after layout settles
+    requestAnimationFrame(() => {
+      this.viewer._resize();
+      this.viewer.recenter();           // back to that saved fit state
+    });
+
+    // ==== SIDEBAR ====
+    const m = $('#viewerMeta');
+    const d = house.data || {};
+    const r = parseReason(d.reason || '');
+
+    const entry = d.entry_strategy || {};
+    const anchor = Array.isArray(entry.anchor_point)
+      ? `[${entry.anchor_point.join(', ')}]` : null;
+
+    m.innerHTML = `
+      <h3>${esc(house.name || d.name || '—')}</h3>
+
+      
+
+      <div class="stats-cards">
+        <div class="stat"><div class="stat-n">${house.rooms}</div><div class="stat-l">Rooms</div></div>
+        <div class="stat"><div class="stat-n">${house.floors}</div><div class="stat-l">Floors</div></div>
+        <div class="stat"><div class="stat-n">${house.edges}</div><div class="stat-l">Edges</div></div>
+      </div>
+
+      ${d.description ? `<p class="muted">${esc(d.description)}</p>` : ''}
+
+      <div class="section">
+        <h4>At a glance</h4>
+        ${kv('Users', d.users)}
+        ${kv('Location', d.location)}
+        ${kv('Climate', d.climate)}
+        
+      </div>
+
+      <div class="section">
+        <h4>Envelope</h4>
+        ${kv('Roof type', d.roof_type, 'wrap2')}
+        ${kv('Facade materials', d.facade_materials, 'wrap2')}
+      </div>
+
+      ${(entry.side || anchor || entry.rationale) ? `
+      <div class="section">
+        <h4>Entry strategy</h4>
+        ${kv('Side', entry.side)}
+        ${anchor ? `<div class="kv"><label>Anchor</label><span class="mono">${esc(anchor)}</span></div>` : ''}
+        ${entry.rationale ? `<p class="small muted">${esc(entry.rationale)}</p>` : ''}
+      </div>` : ''}
+
+      ${(r.parti || r.program_rationale || r.moments_list.length || r.climate_tactics_list.length || r.assumptions_list.length) ? `
+      <details class="section" open>
+        <summary><h4>Design rationale</h4></summary>
+        ${r.parti ? kv('Parti', r.parti) : ''}
+        ${r.program_rationale ? `<p class="small">${esc(r.program_rationale)}</p>` : ''}
+
+        ${r.moments_list.length ? `
+          <div class="subsec">
+            <label>Moments</label>
+            <ul>${r.moments_list.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>
+          </div>` : ''}
+
+        ${r.climate_tactics_list.length ? `
+          <div class="subsec">
+            <label>Climate tactics</label>
+            <ul>${r.climate_tactics_list.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>
+          </div>` : ''}
+
+        ${r.assumptions_list.length ? `
+          <div class="subsec">
+            <label>Assumptions</label>
+            <ul>${r.assumptions_list.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>
+          </div>` : ''}
+      </details>` : ''}
+    `;
+  }
+
+  _renderViewer(house) {
+    const view = this.viewer;
+    view.clear();
+    view.pickables = [];
+    view.roomIndex.clear();                    // reset index
+    const reg = view.createRegistrar();        // get a registrar function
+
+    if (this.viewerMode === 'plan') {
+    buildPlan(view.scene, house.data);       // plan doesn't need highlight registration
+    view.fitPlan(house.data);
+  } else if (this.viewerMode === 'wireframe') {
+    buildWireframe(view.scene, house.data, view.pickables, reg);
+    buildGraphOverlay(view.scene, house.data, null, reg); // (optional) labels/graph
+    view.fit3D(house.data);
+  } else if (this.viewerMode === 'graph') {
+    buildGraphOverlay(view.scene, house.data, null, reg);
+    view.fit3D(house.data);
+  } else {
+    buildVolumes(view.scene, house.data, view.pickables, reg);
+    buildGraphOverlay(view.scene, house.data, null, reg); // (optional) labels/graph
+    view.fit3D(house.data);
+  }
+  }
+}
+
+/* --------------------------- Boot --------------------------- */
+window.addEventListener('DOMContentLoaded', () => { new App(); });

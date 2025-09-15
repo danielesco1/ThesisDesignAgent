@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>House Graph Inspector</title>
+  <link rel="stylesheet" href="stylesv1.css"/>
+</head>
+<body>
+  <!-- Header -->
+  <header class="header">
+    <div class="header-content">
+      <div class="logo"> Plan Gallery</div>
+      <div class="stats-bar">
+        <div class="stat-item"><span>Total:</span><span class="stat-value" id="totalCount">0</span></div>
+        <div class="stat-item"><span>Filtered:</span><span class="stat-value" id="filteredCount">0</span></div>
+        <div class="stat-item"><span>Selected:</span><span class="stat-value" id="selectedCount">0</span></div>
+      </div>
+      <div class="header-controls">
+        <input type="text" class="search-bar" placeholder="Search..." id="searchBar" aria-label="Search"/>
+        <button class="btn secondary" id="compareBtn" aria-pressed="false">Compare</button>
+        <button class="btn secondary" id="analyzeBtn">Analyze</button>
+        <button class="btn" id="uploadBtn">Upload JSONs</button>
+        <input type="file" id="fileInput"
+            multiple accept=".json,application/json"
+            webkitdirectory directory />
+        <button class="view-btn" id="previewGraphBtn" aria-pressed="true">Graph</button>
+        <button class="view-btn" id="previewVolumesBtn" aria-pressed="false">Volumes</button>
+        <button class="view-btn" id="previewPlanBtn" aria-pressed="false">Plan</button>
+        
+      </div>
+    </div>
+  </header>
+
+  <!-- Main -->
+  <div class="main-container">
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-section">
+        <div class="section-title">Filters</div>
+        
+        <div class="filter-group">
+          <label class="filter-label" for="roomRange">Rooms (Max)</label>
+          <input type="range" class="range-input" id="roomRange" min="1" max="20" value="20"/>
+          <div class="range-values"><span id="roomMin">1</span><span id="roomMax">20</span></div>
+        </div>
+        <div class="filter-group">
+          <label class="filter-label">Floors</label>
+          <div class="filter-options" role="group" aria-label="Floor filters">
+            <span class="filter-chip active" data-floors="all" role="button" aria-pressed="true">All</span>
+            <span class="filter-chip" data-floors="1" role="button" aria-pressed="false">1</span>
+            <span class="filter-chip" data-floors="2" role="button" aria-pressed="false">2</span>
+            <span class="filter-chip" data-floors="3+" role="button" aria-pressed="false">3+</span>
+          </div>
+        </div>
+        
+        <div class="filter-group">
+          <label class="filter-label" for="userDropdownTrigger">Users</label>
+          <div class="dd" id="userDropdown" aria-expanded="false">
+            <button
+              id="userDropdownTrigger"
+              class="dropdown-trigger"
+              type="button"
+              aria-haspopup="listbox"
+              aria-expanded="false"
+              aria-controls="userMenu">
+              <span class="dropdown-value">All</span>
+              <svg class="chev" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M7 10l5 5 5-5z"/>
+              </svg>
+            </button>
+            <ul id="userMenu" class="dropdown-menu" role="listbox"></ul>
+          </div>
+        </div>
+
+        <div class="filter-group">
+          <label class="filter-label" for="locationDropdownTrigger">Location</label>
+          <div class="dd" id="locationDropdown" aria-expanded="false">
+            <button
+              id="locationDropdownTrigger"
+              class="dropdown-trigger"
+              type="button"
+              aria-haspopup="listbox"
+              aria-expanded="false"
+              aria-controls="locationMenu">
+              <span class="dropdown-value">All</span>
+              <svg class="chev" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M7 10l5 5 5-5z"/>
+              </svg>
+            </button>
+            <ul id="locationMenu" class="dropdown-menu" role="listbox"></ul>
+          </div>
+        </div>
+
+      <!-- ★★★ Favorites section (added) ★★★ -->
+      <div class="sidebar-section">
+        <div class="section-title">Favorites</div>
+
+        <div class="filter-group">
+          <button class="btn secondary" id="favoritesFilterBtn" aria-pressed="false" title="Show favorites only">
+            ★ Favorites Only
+          </button>
+        </div>
+
+        <div class="filter-group">
+          <button class="btn secondary" id="compareFavoritesBtn" title="Compare up to 4 favorites">
+            Compare ★
+          </button>
+        </div>
+      </div>
+      <!-- ★★★ End Favorites section ★★★ -->
+
+      <div class="sidebar-section analytics-panel">
+        <div class="section-title">Distribution</div>
+        <label class="filter-label">Room Count</label>
+        <div class="mini-chart" id="roomChart"><div class="chart-bars" id="roomBars"></div></div>
+        <label class="filter-label">Floor Count</label>
+        <div class="mini-chart" id="floorChart"><div class="chart-bars" id="floorBars"></div></div>
+        <label class="filter-label">Complexity (edges/room)</label>
+        <div class="mini-chart" id="complexityChart"><div class="chart-bars" id="complexityBars"></div></div>
+      </div>
+    </aside>
+
+    <!-- Content -->
+    <main class="content">
+      <div class="toolbar">
+        <div class="view-controls">
+          <button class="view-btn active" data-view="grid" aria-pressed="true">Grid</button>
+          <button class="view-btn" data-view="list" aria-pressed="false">List</button>
+          <button class="view-btn" data-view="cluster" aria-pressed="false">Cluster</button>
+        </div>
+        <div class="view-controls">
+          <button class="view-btn" id="selectAllBtn">Select All</button>
+          <button class="view-btn" id="clearBtn">Clear</button>
+          <button class="view-btn" id="exportBtn">Export</button>
+        </div>
+      </div>
+
+      <div class="batch-actions" id="batchActions">
+        <span class="batch-count"><span id="batchCount">0</span> items selected</span>
+        <button class="btn secondary" id="compareBatch">Compare Selected</button>
+        <button class="btn secondary" id="analyzeBatch">Analyze Selected</button>
+        <button class="view-btn" id="deselectBatch">Deselect All</button>
+      </div>
+
+      <!-- Gallery -->
+      <div class="gallery-container" id="galleryContainer">
+        <div class="gallery-grid" id="galleryGrid"></div>
+      </div>
+
+      <!-- Comparison -->
+      <div class="comparison-view" id="comparisonView">
+        <div class="comparison-header">
+          <h2>Model Comparison</h2>
+          <button class="btn secondary" id="exitComparison">Exit Comparison</button>
+        </div>
+        <div class="comparison-panels" id="comparisonPanels"></div>
+        <div class="differences-panel" id="differencesPanel"></div>
+      </div>
+
+      <!-- Cluster -->
+      <div class="cluster-view" id="clusterView">
+        <div class="cluster-container" id="clusterContainer"></div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Three.js first, then app -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128/examples/js/controls/OrbitControls.js"></script>
+  <script type="module" src="script.js"></script>
+
+  <!-- Detail Modal -->
+<div id="viewerModal" class="modal hidden">
+  <div class="modal-content">
+    <span id="closeModal">&times;</span>
+    
+    <div class="viewer-layout">
+      <!-- Enhanced Sidebar -->
+      <aside id="viewerSidebar">
+        <div id="houseProps"></div>
+      </aside>
+      
+      <!-- Main Viewer Area -->
+      <div class="viewer-body" style="flex:1; display:flex; flex-direction:column;">
+        <!-- Add controls overlay -->
+        
+        <!-- Canvas -->
+        <canvas id="viewerCanvas" style="flex:1;"></canvas>
+        
+        <!-- Room info overlay -->
+        <!-- <div id="roomInfo" style="position:absolute; top:20px; right:20px;"></div> -->
+         <div id="roomInfo"></div>
+        
+        <!-- Toolbar -->
+        <div class="viewer-toolbar">
+          <button class="view-btn active" data-mode="volumes">Volumes</button>
+          <button class="view-btn" data-mode="graph">Graph</button>
+          <button class="view-btn" data-mode="wireframe">Wireframe</button>
+          <button class="view-btn" data-mode="plan">Plan</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

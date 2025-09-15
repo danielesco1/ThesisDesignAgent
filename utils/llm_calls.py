@@ -171,7 +171,7 @@ def query(client, model, message, system_prompt=None, temperature=0.2):
     resp = client.chat.completions.create(
         model=model,
         messages=msgs,
-        temperature=temperature,
+        # temperature=temperature,
     )
 
     out = resp.choices[0].message.content.strip()

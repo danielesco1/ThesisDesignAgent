@@ -17,7 +17,8 @@ EMBED_MODELS = {
 
 COMPLETION_MODELS = {
     "openai": {  # OpenAI-hosted models only    
-            "gpt-4o": "gpt-4o",  
+            "gpt-4o": "gpt-4o", 
+            "gpt-5": "gpt-5-mini", 
     },
     "cloudflare": {
         "hermes-2-pro-7b": "@hf/nousresearch/hermes-2-pro-mistral-7b",
@@ -26,9 +27,10 @@ COMPLETION_MODELS = {
     "local": {  # LM Studio (OpenAI-compatible) or similar
         "llama3":   "lmstudio-community/Meta-Llama-3.1-8B-Instruct-GGUF",
         "gemma3":   "lmstudio-community/google/gemma-3-12b-it-GGUF",
-        "gemma3n":  "lmstudio-community/google/gemma-3n-e4b",
         "gpt-oss-20b": "openai/gpt-oss-20b",      # LM Studio supports this repo id
         "qwen2.5": "lmstudio-community/Qwen2.5-VL-7B-Instruct-GGUF",
+        "deepseek": "lmstudio-community/DeepSeek-R1-0528-Qwen3-8B-GGUF",
+        "qwen3": "lmstudio-community/Qwen3-4B-Thinking-2507-GGUF",
     },
 }
 

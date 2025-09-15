@@ -71,5 +71,5 @@ def llm_call():
 
 
 if __name__ == '__main__':
-    print("\n✨ Chat UI available at: http://localhost:5000\n")
+    print("\n Chat UI available at: http://localhost:5000\n")
     app.run(port=5000, debug=True)
