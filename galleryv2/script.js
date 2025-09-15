@@ -33,6 +33,106 @@ function parseReason(s = '') {
   obj.assumptions_list     = splitEnum(obj.assumptions);
   return obj;
 }
+
+function renderSiteAnalysis(text='') {
+  if (!text.trim()) return '';
+  return `
+    <div class="tab-pane" data-pane="site">
+      <h4>Site analysis</h4>
+      <p class="small">${esc(text)}</p>
+    </div>
+  `;
+}
+
+function renderGraphVerifier(gv) {
+  if (!gv) return '';
+  const badge = (v) => {
+    const cls = v === 'ok' ? 'badge-ok' : v === 'fail' ? 'badge-fail' : 'badge-warn';
+    const label = v === 'ok' ? 'OK' : v === 'fail' ? 'Fail' : 'Warn';
+    return `<span class="badge ${cls}">${label}</span>`;
+  };
+
+  const findings = Array.isArray(gv.key_findings) ? gv.key_findings.map(f => {
+    const m = f?.evidence?.metrics || {};
+    const idHtml = f.id && f.id !== 'global'
+      ? `<button class="link-like" data-node-link="${esc(f.id)}" title="Highlight in view">${esc(f.id)}</button>`
+      : `<span class="mono">${esc(f.id)}</span>`;
+    return `
+      <li class="finding">
+        <div class="finding-head">
+          <strong>${idHtml}</strong>
+          <span class="badge ${f.severity === 'high' ? 'badge-fail' : f.severity === 'med' ? 'badge-warn' : 'badge-ok'}">${esc(f.severity || '')}</span>
+        </div>
+        <div class="finding-issue">${esc(f.issue || '')}</div>
+        ${f.why_it_matters ? `<div class="finding-why small muted">${esc(f.why_it_matters)}</div>` : ''}
+
+        ${Object.keys(m).length ? `
+          <div class="kv-grid mono">
+            ${Object.entries(m).map(([k,v]) => `<div class="kv"><label>${esc(k)}</label><span>${esc(v)}</span></div>`).join('')}
+          </div>` : ''}
+
+        ${f.evidence?.topology ? `<div class="small">Topology: ${esc(f.evidence.topology)}</div>` : ''}
+        ${f.evidence?.use_implication ? `<div class="small">Use: ${esc(f.evidence.use_implication)}</div>` : ''}
+      </li>
+    `;
+  }).join('') : '';
+
+  const suggestions = Array.isArray(gv.suggestions) ? gv.suggestions.map(s => {
+    const d = s.details || {};
+    const fx = s.expected_effect || {};
+    const md = fx.metrics_direction || {};
+    return `
+      <li class="suggestion">
+        <div class="suggestion-head">
+          <span class="badge badge-info mono">${esc(s.action || 'change')}</span>
+          ${d.from_node ? `<span class="mono">${esc(d.from_node)}</span>` : ''} 
+          ${d.to_node ? `→ <span class="mono">${esc(d.to_node)}</span>` : ''}
+          ${Number.isFinite(s.priority) ? `<span class="badge badge-pri">P${s.priority}</span>` : ''}
+        </div>
+        ${fx.spatial ? `<div class="small muted">${esc(fx.spatial)}</div>` : ''}
+
+        ${Object.keys(md).length ? `
+          <div class="kv-grid mono">
+            ${Object.entries(md).map(([k,v]) => `<div class="kv"><label>${esc(k)}</label><span>${esc(v)}</span></div>`).join('')}
+          </div>` : ''}
+      </li>
+    `;
+  }).join('') : '';
+
+  const kpis = gv.kpi_summary || {};
+  const met = Array.isArray(kpis.targets_met) && kpis.targets_met.length
+    ? `<div class="pill-row">${kpis.targets_met.map(t=>`<span class="pill pill-ok">${esc(t)}</span>`).join('')}</div>` : '';
+  const missed = Array.isArray(kpis.targets_missed) && kpis.targets_missed.length
+    ? `<div class="pill-row">${kpis.targets_missed.map(t=>`<span class="pill pill-warn">${esc(t)}</span>`).join('')}</div>` : '';
+
+  return `
+    <div class="tab-pane" data-pane="verifier">
+      <div class="verdict">${badge(gv.verdict || 'warn')}<span class="mono">Graph Verifier</span></div>
+      ${gv.parti_summary ? `<p class="small">${esc(gv.parti_summary)}</p>` : ''}
+
+      ${findings ? `
+        <div class="subsec">
+          <h5>Key findings</h5>
+          <ul class="list">${findings}</ul>
+        </div>` : ''}
+
+      ${suggestions ? `
+        <div class="subsec">
+          <h5>Suggestions</h5>
+          <ul class="list">${suggestions}</ul>
+        </div>` : ''}
+
+      ${(met || missed) ? `
+        <div class="subsec">
+          <h5>KPIs</h5>
+          ${met}
+          ${missed}
+        </div>` : ''}
+
+      ${gv.notes ? `<p class="small muted">${esc(gv.notes)}</p>` : ''}
+    </div>
+  `;
+}
 /* ----------------------------------------------- */
 
 /* --------------------------- Config --------------------------- */
@@ -40,8 +140,9 @@ const XY = 1;
 const LEVEL_RISE = 3;
 const BG = 0xffffff;
 const EDGECOLOR = 0x000000;
-const FIT3D_PAD = 0.95;   // tweak to taste; 0.85..1.20
+const FIT3D_PAD = 0.85;   // tweak to taste; 0.85..1.20
 const FIT3D_ELEV = 0.80;  // vertical raise factor (was 0.8)
+const FIT_TIGHT = 0.60; 
 const HIGHLIGHT = 0xff00ff;
 
 const PRIVACY_COLORS = {
@@ -58,6 +159,10 @@ const nodeColor = (n) => new THREE.Color(
   (n.privacy_level === 'private' ? '#ff6b6b' :
    n.privacy_level === 'semi_private' ? '#f5a623' : '#667eea')
 );
+
+// Put near top of file if you want an easy flip switch:
+const NORTH_IS_NEG_Z = true;   // most of your data uses -Z as North in plan
+  
 /* ------------------------ Thumbnail cache ------------------------ */
 function parseModelsFromFilename(fname='') {
   // drop extension
@@ -381,6 +486,8 @@ class SceneView {
 
     // Labels overlay (inside .gl-wrap)
     this._initLabelRenderer();
+    this._ensureNorthWidget();
+    this.controls.addEventListener('change', () => this._updateNorthArrow());
 
     // ---- Left rooms list click-to-highlight (NEW) ----
     this.roomsEl = $('#viewerRooms');
@@ -480,6 +587,7 @@ _applyZoomStep(k) {
   this.camera.updateProjectionMatrix();
   this.renderer.setSize(w, h, false);
   this.labelRenderer.setSize(w, h);         // <— keep labels in sync
+  this._updateNorthArrow();
 }
 
 _animate() {
@@ -491,12 +599,26 @@ _animate() {
       if (Math.abs(this._zoomMomentum) < 0.00015) this._zoomMomentum = 0;
       this._applyZoomStep(step);
     }
+
+    // >>> animate verifier dashes
+    if (this._verifierDashMats && this._verifierDashMats.length) {
+      for (const m of this._verifierDashMats) {
+        // Three's LineDashedMaterial uses .dashOffset in newer builds
+        if (typeof m.dashOffset === 'number') {
+          m.dashOffset -= 0.015;
+          m.needsUpdate = true;
+        }
+      }
+    }
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
     this.labelRenderer.render(this.scene, this.camera); // <— render labels
+    this._updateNorthAfterRender();
   };
   loop();
 }
+
+
   clear() {
     this.pickables.length = 0;
     const toDispose = [];
@@ -529,7 +651,6 @@ _animate() {
   }
 }
 
-
   fit3D(data) {
     this._lastData = data;
     const b = worldBounds(data);
@@ -553,7 +674,7 @@ _animate() {
     const dist = Math.max(
       r / Math.tan(hFov / 2),
       (r * 1.2) / Math.tan(fov / 2)
-    ) * FIT3D_PAD;
+    ) * FIT3D_PAD * FIT_TIGHT;;
 
     this.camera.position.set(cx + dist, cy + dist * FIT3D_ELEV, cz + dist);
 
@@ -565,6 +686,7 @@ _animate() {
 
     this._applyClipAndDistance(r);
     this.controls.saveState();
+    this._updateNorthArrow();
   }
 
   fitPlan(data) {
@@ -577,29 +699,32 @@ _animate() {
     const pad = Math.max(0.08 * Math.max(w,h), 0.16);
     w += pad*2; h += pad*2;
 
-    // ortho sized to canvas
     const aspect = this._aspect();
     let hw = w/2, hh = h/2;
     if (hw/hh > aspect) hh = hw/aspect; else hw = hh*aspect;
 
     const ortho = new THREE.OrthographicCamera(-hw, hw, hh, -hh, -100, 1000);
     ortho.position.set(cx, 100, cz);
-    ortho.up.set(0, 0, -1);
+
+    // ⬇️ Flip the camera roll so plan is rotated 180° (north at top)
+    ortho.up.set(0, 0, 1);              // was (0, 0, -1)
+
     ortho.lookAt(cx, 0, cz);
 
     this.camera = ortho;
     this.controls.object = ortho;
     this._setControlsDefaults();
-    this.controls.enableRotate = false; // plan is top-down
+    this.controls.enableRotate = false;
     this.controls.enablePan = true;
-    this.controls.enableZoom = false;   // keep Orbit wheel OFF
-    
+    this.controls.enableZoom = false;
+
     this.controls.target.set(cx, 0, cz);
     this.controls.update();
     this.controls.minZoom = 0.5;
     this.controls.maxZoom = 8;
     this._applyClipAndDistance(Math.max(w,h));
     this.controls.saveState();
+    this._updateNorthArrow();
   }
 
   recenter() {
@@ -704,19 +829,425 @@ _animate() {
     $$('#viewerRooms .room-item').forEach(b => b.classList.remove('active'));
   }
 
-  setColorByPrivacy(flag){
-  this.colorByPrivacy = !!flag;
+  // call this to re-apply base (privacy or original) colors
+_applyBaseColors(){
+  const usePriv = !!this.colorByPrivacy;
   for (const [, rec] of this.roomIndex){
-    const col = this.colorByPrivacy ? rec.colors?.priv : rec.colors?.base;
+    const col = usePriv ? rec.colors?.priv : rec.colors?.base;
     if (!col) continue;
     rec.meshes.forEach(m=>{
-      if (m.material?.color) {
+      if (m.material?.color){
         m.material.color.copy(col);
         m.material.needsUpdate = true;
       }
     });
   }
 }
+
+setColorByPrivacy(flag){
+  this.colorByPrivacy = !!flag;
+  this._applyBaseColors();
+  // if overlaps are on, re-apply that highlight on top
+  if (this._overlapOn) this.setHighlightOverlaps(true, this._overlapPairs || []);
+}
+
+// NEW: highlight any nodes that are in the overlap pairs
+setHighlightOverlaps(flag, pairs){
+  this._overlapOn = !!flag;
+  this._overlapPairs = Array.isArray(pairs) ? pairs : [];
+
+  const ids = new Set();
+  if (this._overlapOn) {
+    for (const p of this._overlapPairs){
+      if (p?.a) ids.add(p.a);
+      if (p?.b) ids.add(p.b);
+    }
+  }
+
+  // Do NOT call _applyBaseColors() here. Preserve whatever scheme is active.
+
+  for (const [nodeId, rec] of this.roomIndex){
+    const active = this._overlapOn && ids.has(nodeId);
+
+    rec.meshes.forEach(m=>{
+      const mat = m.material; if (!mat) return;
+      mat.transparent = true;
+      mat.opacity = active ? 1.0 : 0.95;  // tweak visibility only
+      if ('emissive' in mat) mat.emissive.setHex(active ? 0xff3366 : 0x000000);
+      mat.needsUpdate = true;
+    });
+
+    rec.edges.forEach(l=>{
+      l.material.opacity = active ? 1.0 : 0.9;
+      l.material.color.setHex(active ? 0xff3366 : EDGECOLOR);
+      l.material.needsUpdate = true;
+    });
+
+    rec.labels.forEach(lbl=>{
+      if (this._overlapOn) lbl.element.classList.toggle('muted', !active);
+      else lbl.element.classList.remove('muted');
+    });
+  }
+}
+
+setColorByMetric(metricName, perNode = {}) {
+  this.metricName = metricName || null;
+
+  // Clear → restore base scheme (privacy/original)
+  if (!this.metricName) {
+    this._applyBaseColors();
+    if (this._overlapOn) this.setHighlightOverlaps(true, this._overlapPairs || []);
+    return;
+  }
+
+  // Collect numeric values for nodes actually in the scene
+  const vals = [];
+  for (const [id] of this.roomIndex) {
+    const v = perNode?.[id]?.[this.metricName];
+    if (Number.isFinite(v)) vals.push(v);
+  }
+  if (!vals.length) return;
+
+  // Robust range using clamped percentile indices (works for small N too)
+  vals.sort((a,b)=>a-b);
+  const n = vals.length;
+  const idxLo = Math.max(0, Math.floor((n - 1) * 0.05));
+  const idxHi = Math.min(n - 1, Math.ceil ((n - 1) * 0.95));
+  const lo = vals[idxLo];
+  const hi = vals[idxHi];
+  const span = Math.max(1e-9, hi - lo); // avoid divide-by-zero
+
+  // Blue → Red (low=blue, high=red)
+  const C0 = new THREE.Color(0x2166f3);
+  const C1 = new THREE.Color(0xe74c3c);
+  const lerpColor = (out, a, b, t) => out.setRGB(
+    a.r + (b.r - a.r) * t,
+    a.g + (b.g - a.g) * t,
+    a.b + (b.b - a.b) * t
+  );
+
+  // Special-case if you want inverted metrics
+  const invert = (this.metricName === 'depth_from_entry');
+
+  const col = new THREE.Color();
+  for (const [id, rec] of this.roomIndex) {
+    const v = perNode?.[id]?.[this.metricName];
+    if (!Number.isFinite(v)) continue;
+
+    // normalized t in [0,1]
+    const t  = (Math.min(hi, Math.max(lo, v)) - lo) / span;
+    const tt = invert ? 1 - t : t;
+
+    lerpColor(col, C0, C1, Math.min(1, Math.max(0, tt)));
+
+    rec.meshes.forEach(m => {
+      const mat = m.material; if (!mat) return;
+      if (mat.color) mat.color.copy(col);
+      mat.transparent = true;
+      mat.opacity = Math.max(0.85, mat.opacity ?? 0.85);
+      mat.needsUpdate = true;
+    });
+  }
+
+  // If overlaps are on, keep their emissive/edge pop on top
+  if (this._overlapOn) this.setHighlightOverlaps(true, this._overlapPairs || []);
+}
+
+// ---- Verifier suggested edges overlay (dashed red cylinders) ----
+// === helpers ====================================================
+getNodeCenterById(id){
+  const rec = this.roomIndex.get(id);
+  return rec?.center ? rec.center.clone() : null;
+}
+
+// === draw suggested edges + highlight endpoint rooms ============
+setVerifierEdges(on, edgesAdd = [], getCenter = (id) => this.getNodeCenterById(id)) {
+  // wipe any previous
+  if (this._verifierObjs) {
+    for (const o of this._verifierObjs) {
+      o.parent?.remove(o);
+      o.geometry?.dispose?.();
+      (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m?.dispose?.());
+    }
+  }
+  this._verifierObjs = [];
+  this._verifierDashMats = [];   // for dash animation
+  this._verifierOn = !!on;
+
+  // clear node highlighting if turning off
+  if (!this._verifierOn) {
+    this._verifierNodeIds = null;
+    this._applyVerifierHighlightNodes(false);
+    return;
+  }
+
+  const COL = 0xff2a55;          // punchy pink-red
+  const ids = new Set();
+
+  for (const [a, b] of (edgesAdd || [])) {
+    const A = getCenter?.(a);
+    const B = getCenter?.(b);
+    if (!A || !B) continue;
+
+    // --- 1) animated dashed line (thin but very visible)
+    const g = new THREE.BufferGeometry().setFromPoints([A, B]);
+    const m = new THREE.LineDashedMaterial({
+      color: COL,
+      dashSize: 0.60,            // longer dash
+      gapSize: 0.28,             // a bit more gap
+      transparent: true,
+      opacity: 1.0,
+      depthTest: false,          // always draw on top
+      depthWrite: false
+    });
+    const line = new THREE.Line(g, m);
+    line.computeLineDistances();
+    line.renderOrder = 2000;
+    this.scene.add(line);
+    this._verifierObjs.push(line);
+    this._verifierDashMats.push(m);  // animate in _animate()
+
+    // --- 2) bright inner glow tube (thicker)
+    const path = new THREE.LineCurve3(A, B);
+    const t1 = new THREE.TubeGeometry(path, 48, 0.28, 24, false); // radius ↑
+    const tm1 = new THREE.MeshBasicMaterial({
+      color: COL,
+      transparent: false,
+      opacity: 0.85,
+      blending: THREE.AdditiveBlending,
+      depthTest: false,
+      depthWrite: false
+    });
+    const tube1 = new THREE.Mesh(t1, tm1);
+    tube1.renderOrder = 1999;
+    this.scene.add(tube1);
+    this._verifierObjs.push(tube1);
+
+    // --- 3) soft outer halo tube (even wider, subtle)
+    const t2 = new THREE.TubeGeometry(path, 48, 0.55, 24, false); // radius ↑
+    const tm2 = new THREE.MeshBasicMaterial({
+      color: COL,
+      transparent: false,
+      opacity: 0.22,
+      blending: THREE.AdditiveBlending,
+      depthTest: false,
+      depthWrite: false
+    });
+    const tube2 = new THREE.Mesh(t2, tm2);
+    tube2.renderOrder = 1998;
+    this.scene.add(tube2);
+    this._verifierObjs.push(tube2);
+
+    // --- 4) endpoint + midpoint glow sprites
+    const makeGlow = (pos, s = 0.9) => {
+      const sm = new THREE.SpriteMaterial({
+        color: COL,
+        transparent:false,
+        opacity: 0.95,
+        blending: THREE.AdditiveBlending,
+        depthTest: false,
+        depthWrite: false
+      });
+      const sp = new THREE.Sprite(sm);
+      sp.position.copy(pos);
+      sp.scale.set(s, s, s);
+      sp.renderOrder = 2001;
+      this.scene.add(sp);
+      this._verifierObjs.push(sp);
+    };
+    makeGlow(A, 0.95);
+    makeGlow(B, 0.95);
+    makeGlow(A.clone().lerp(B, 0.5), 0.75); // midpoint spark
+
+    ids.add(a); ids.add(b);
+  }
+
+  // remember which rooms to pop
+  this._verifierNodeIds = ids;
+  this._applyVerifierHighlightNodes(true);
+}
+
+// highlight connector endpoint rooms (works in all modes)
+_applyVerifierHighlightNodes(flag){
+  const ids = this._verifierNodeIds || new Set();
+  const EDGE_RED = 0xff2a55;
+
+  for (const [nodeId, rec] of this.roomIndex) {
+    const active = flag && ids.has(nodeId);
+
+    // --- Meshes (Volumes, Plan plates, Wireframe base plates) ---
+    rec.meshes.forEach(m => {
+      const mat = m.material; if (!mat) return;
+
+      // lazily snapshot original props once
+      const ud = mat.userData || (mat.userData = {});
+      if (!ud._orig) {
+        ud._orig = {
+          color:  mat.color ? mat.color.clone() : null,
+          emissive: ('emissive' in mat) ? mat.emissive.clone() : null,
+          emissiveIntensity: ('emissiveIntensity' in mat) ? mat.emissiveIntensity : null,
+          opacity: mat.opacity,
+          blending: mat.blending,
+          depthWrite: mat.depthWrite
+        };
+      }
+
+      if (active) {
+        // make it as visible as possible
+        if (mat.color) mat.color.setHex(EDGE_RED);
+        mat.opacity = 1.0;
+
+        // MeshStandardMaterial / Phong etc – strong glow
+        if ('emissive' in mat) {
+          mat.emissive.setHex(EDGE_RED);
+          if ('emissiveIntensity' in mat) mat.emissiveIntensity = Math.max(1.0, mat.emissiveIntensity || 1.0);
+        } else {
+          // MeshBasicMaterial – use additive so it pops
+          mat.blending   = THREE.AdditiveBlending;
+          mat.depthWrite = false;
+        }
+      } else {
+        // restore original props
+        if (ud._orig) {
+          if (ud._orig.color && mat.color) mat.color.copy(ud._orig.color);
+          if (ud._orig.emissive && 'emissive' in mat) mat.emissive.copy(ud._orig.emissive);
+          if ('emissiveIntensity' in mat && ud._orig.emissiveIntensity != null)
+            mat.emissiveIntensity = ud._orig.emissiveIntensity;
+          mat.opacity   = ud._orig.opacity;
+          mat.blending  = ud._orig.blending;
+          mat.depthWrite= ud._orig.depthWrite;
+        }
+      }
+      mat.transparent = true;
+      mat.needsUpdate = true;
+    });
+
+    // --- Edges (wireframe outlines / plan outlines) ---
+    rec.edges.forEach(l => {
+      const lm = l.material; if (!lm) return;
+      const ud = lm.userData || (lm.userData = {});
+      if (!ud._orig) {
+        ud._orig = {
+          color: lm.color ? lm.color.clone() : null,
+          opacity: lm.opacity
+        };
+      }
+      if (active) {
+        if (lm.color) lm.color.setHex(EDGE_RED);
+        lm.opacity = 1.0;
+      } else if (ud._orig) {
+        if (ud._orig.color && lm.color) lm.color.copy(ud._orig.color);
+        lm.opacity = ud._orig.opacity;
+      }
+      lm.needsUpdate = true;
+    });
+
+    // --- Labels: emphasize endpoints when active, restore otherwise ---
+    rec.labels?.forEach(lbl => {
+      if (flag) lbl.element.classList.toggle('muted', !active);
+      else lbl.element.classList.remove('muted');
+    });
+  }
+}
+
+_initNorthArrow() {
+    const host = this.glWrap || this.canvas.parentElement || document.body;
+
+    // container
+    const box = document.createElement('div');
+    box.className = 'north-widget';
+    box.innerHTML = `
+      <div class="north-svg">
+        <svg viewBox="0 0 100 100" aria-label="North arrow">
+          <!-- ring -->
+          <circle cx="50" cy="50" r="46" fill="none" stroke="currentColor" stroke-width="6" opacity="0.35"/>
+          <!-- needle (we rotate this) -->
+          <polygon id="north-needle" points="50,6 62,46 50,40 38,46"
+                  fill="currentColor" />
+          <!-- N label (kept upright) -->
+          <text x="50" y="82" text-anchor="middle" font-size="26" font-weight="700">N</text>
+        </svg>
+      </div>
+    `;
+    // don’t steal mouse
+    box.style.pointerEvents = 'none';
+    host.appendChild(box);
+
+    this._northEl = box;
+    this._northNeedle = box.querySelector('#north-needle');
+
+    // keep it updated
+    this._updateNorthArrow();
+  }
+
+    // In SceneView
+  _ensureNorthWidget(){
+      if (this._northEl) return;
+
+      // host: .gl-wrap is already position:relative
+      const host = this.glWrap || this.renderer.domElement.parentElement;
+
+      const wrap = document.createElement('div');
+      wrap.className = 'north-widget';
+      // a tiny SVG arrow that defaults pointing UP
+      wrap.innerHTML = `
+        <div class="north-arrow" aria-label="north">
+          <svg viewBox="0 0 24 24" width="24" height="24">
+            <path d="M12 3l6 10H6z" fill="currentColor"></path>
+          </svg>
+          <span class="north-label">N</span>
+        </div>
+      `;
+      // minimal inline styles so it works even without CSS
+      Object.assign(wrap.style, {
+        position:'absolute', left:'12px', bottom:'12px', zIndex:'5', pointerEvents:'none'
+      });
+      const arrow = wrap.querySelector('.north-arrow');
+      Object.assign(arrow.style, {
+        width:'36px', height:'36px', borderRadius:'10px',
+        display:'grid', placeItems:'center',
+        background:'rgba(255,255,255,.92)',
+        boxShadow:'0 2px 6px rgba(0,0,0,.15)',
+        color:'#e34855',      // arrow color
+        transformOrigin:'50% 50%',
+        transition:'transform 80ms linear'
+      });
+      const label = wrap.querySelector('.north-label');
+      Object.assign(label.style, {
+        position:'absolute', bottom:'2px', font:'700 10px/1 system-ui, sans-serif',
+        color:'#111', opacity:'.8', letterSpacing:'0.02em'
+      });
+
+      host.appendChild(wrap);
+      this._northEl = wrap;
+      this._northArrow = arrow;
+    }
+
+    // Update the arrow orientation.
+    // In Plan (orthographic top-down) we keep North=Up for verification.
+    // In 3D, rotate so it points toward world +Z on the screen.
+    _updateNorthArrow(){
+      if (!this._northArrow || !this.camera) return;
+
+      if (this.camera.isOrthographicCamera){
+        // Plan view is already aligned so that North is at the top.
+        this._northArrow.style.transform = 'rotate(0deg)';
+        return;
+      }
+
+      // Perspective: compute camera yaw around Y and rotate opposite so arrow points to +Z.
+      const eul = new THREE.Euler().setFromRotationMatrix(this.camera.matrixWorld, 'YXZ');
+      const yawDeg = THREE.MathUtils.radToDeg(eul.y);      // 0 when looking -Z
+      const angle = 180 - yawDeg;                           // make +Z (north) point up
+      this._northArrow.style.transform = `rotate(${angle}deg)`;
+    }
+
+
+  // ensure it stays correct after resizes / fits
+  _updateNorthAfterRender() {
+    // tiny helper if you prefer calling post-render
+    this._updateNorthArrow();
+  }
 
 }
 
@@ -740,7 +1271,12 @@ class Thumbnailer {
       const pad = Math.max(0.08*Math.max(w,h), 0.16); w+=pad*2; h+=pad*2;
       const aspect = this.w/this.h; let hw=w/2, hh=h/2; if (hw/hh>aspect) hh=hw/aspect; else hw=hh*aspect;
       camera = new THREE.OrthographicCamera(-hw, hw, hh, -hh, -100, 1000);
-      camera.position.set(cx, 100, cz); camera.up.set(0,0,-1); camera.lookAt(cx,0,cz);
+      camera.position.set(cx, 100, cz);
+
+      // ⬇️ match viewer: 180° rotation for plan
+      camera.up.set(0, 0, 1);             // was (0, 0, -1)
+
+      camera.lookAt(cx,0,cz);
       buildPlan(scene, data);
     } else if (mode === 'wireframe') {
       camera = new THREE.PerspectiveCamera(50, this.w/this.h, 0.1, 3000);
@@ -748,7 +1284,10 @@ class Thumbnailer {
       const b = worldBounds(data);
       const [cx,cy,cz] = b.center; const r = Math.max(0.001, b.radius);
       const fov = (camera.fov*Math.PI)/180, aspect = this.w/this.h, hFov = 2*Math.atan(Math.tan(fov/2)*aspect);
-      const dist = Math.max(r/Math.tan(hFov/2),(r*1.2)/Math.tan(fov/2))*1.6;
+      const dist = Math.max(
+        r / Math.tan(hFov / 2),
+        (r * 1.2) / Math.tan(fov / 2)
+      ) * FIT3D_PAD * FIT_TIGHT; 
       camera.position.set(cx+dist, cy+dist*.8, cz+dist); camera.lookAt(cx,cy,cz);
     } else if (mode === 'graph') {
       camera = new THREE.PerspectiveCamera(50, this.w/this.h, 0.1, 3000);
@@ -756,7 +1295,10 @@ class Thumbnailer {
       const b = worldBounds(data);
       const [cx,cy,cz] = b.center; const r = Math.max(0.001, b.radius);
       const fov = (camera.fov*Math.PI)/180, aspect = this.w/this.h, hFov = 2*Math.atan(Math.tan(fov/2)*aspect);
-      const dist = Math.max(r/Math.tan(hFov/2),(r*1.2)/Math.tan(fov/2))*1.6;
+      const dist = Math.max(
+        r / Math.tan(hFov / 2),
+        (r * 1.2) / Math.tan(fov / 2)
+      ) * FIT3D_PAD * FIT_TIGHT; 
       camera.position.set(cx+dist, cy+dist*.8, cz+dist); camera.lookAt(cx,cy,cz);
     } else {
       camera = new THREE.PerspectiveCamera(50, this.w/this.h, 0.1, 3000);
@@ -764,7 +1306,10 @@ class Thumbnailer {
       const b = worldBounds(data);
       const [cx,cy,cz] = b.center; const r = Math.max(0.001, b.radius);
       const fov = (camera.fov*Math.PI)/180, aspect = this.w/this.h, hFov = 2*Math.atan(Math.tan(fov/2)*aspect);
-      const dist = Math.max(r/Math.tan(hFov/2),(r*1.2)/Math.tan(fov/2))*1.6;
+      const dist = Math.max(
+        r / Math.tan(hFov / 2),
+        (r * 1.2) / Math.tan(fov / 2)
+      ) * FIT3D_PAD * FIT_TIGHT; 
       camera.position.set(cx+dist, cy+dist*.8, cz+dist); camera.lookAt(cx,cy,cz);
     }
 
@@ -791,6 +1336,8 @@ class App {
 
     this._wireEvents();
     this._dnd();
+    this.metric = null;
+    this.metricsPerNode = null;   // lazily set when a house is opened/rendered
   }
 
   _wireEvents() {
@@ -814,31 +1361,18 @@ class App {
       };
     });
 
-    $$('.viewer-toolbar .chip').forEach(btn => {
-      if (btn.id === 'recenterBtn') return; // recenter wired below
-      btn.onclick = () => {
-        $$('.viewer-toolbar .chip').forEach(x => { if (x.id!=='recenterBtn'){ x.classList.remove('active'); x.setAttribute('aria-pressed','false'); }});
-        btn.classList.add('active'); btn.setAttribute('aria-pressed','true');
-        this.viewerMode = btn.dataset.vmode;
-        if (this._openHouse) this._renderViewer(this._openHouse);
-      };
-    });
-
-    // Mode chips: only those with data-vmode
+    // View mode chips only (avoid catching metric/privacy/etc.)
     $$('.viewer-toolbar .chip[data-vmode]').forEach(btn => {
       btn.onclick = () => {
         $$('.viewer-toolbar .chip[data-vmode]').forEach(x => {
           x.classList.remove('active'); x.setAttribute('aria-pressed','false');
         });
         btn.classList.add('active'); btn.setAttribute('aria-pressed','true');
-        this.viewerMode = btn.dataset.vmode;
-        if (this._openHouse) {
-          this._renderViewer(this._openHouse);
-          if (this.privacyMode) view.setColorByPrivacy(true); // reapply after re-render
-        }
+        this.viewerMode = btn.dataset.vmode || this.viewerMode;
+        if (this._openHouse) this._renderViewer(this._openHouse);
       };
     });
-
+    
     // Privacy toggle (separate)
     this.privacyMode = false;
     const privacyBtn = $('#privacyBtn');
@@ -850,9 +1384,91 @@ class App {
         this.viewer?.setColorByPrivacy(this.privacyMode);
       };
     }
+    // Overlaps button
+const overlapBtn = $('#overlapBtn');
+if (overlapBtn){
+  overlapBtn.onclick = () => {
+    this._overlapsOn = !this._overlapsOn;
 
+    overlapBtn.classList.toggle('active', this._overlapsOn);
+    overlapBtn.setAttribute('aria-pressed', String(this._overlapsOn));
+
+    const pairs = this._openHouse?.data?.validation?.volume_overlaps?.pairs || [];
+    // IMPORTANT: always call with the current flag so OFF clears the styling
+    this.viewer?.setHighlightOverlaps(this._overlapsOn, pairs);
+  };
+}
+
+    // ===== Metric coloring (betweenness_choice / degree / integration_closeness) =====
+    $$('.viewer-toolbar .metricBtn').forEach(btn => {
+      btn.onclick = () => {
+        const metric = btn.dataset.metric;
+        const isActive = btn.classList.contains('active');
+
+        if (isActive) {
+          btn.classList.remove('active');
+          btn.setAttribute('aria-pressed','false');
+          this.metric = null;
+        } else {
+          $$('.viewer-toolbar .metricBtn').forEach(x => {
+            x.classList.remove('active'); x.setAttribute('aria-pressed','false');
+          });
+          btn.classList.add('active'); btn.setAttribute('aria-pressed','true');
+          this.metric = metric;
+        }
+
+        // turn off privacy if a metric is active (optional UX)
+        if (this.metric && this.privacyMode) {
+          this.privacyMode = false;
+          const pb = $('#privacyBtn');
+          pb?.classList.remove('active');
+          pb?.setAttribute('aria-pressed','false');
+          this.viewer?.setColorByPrivacy(false);
+        }
+
+        // Recolor in place (no re-fit, no recenter, no re-render)
+        if (this.viewer) {
+          const perNode = this.metricsPerNode ||
+                          (this._openHouse?.data?.networkx_analysis?.per_node ?? null);
+
+          if (this.metric && perNode) {
+            this.viewer.setColorByMetric(this.metric, perNode);
+          } else {
+            this.viewer.setColorByMetric(null, null); // back to base scheme
+            if (this.privacyMode) this.viewer.setColorByPrivacy(true);
+          }
+
+          // keep overlaps highlight
+          const pairs = this._openHouse?.data?.validation?.volume_overlaps?.pairs || [];
+          this.viewer.setHighlightOverlaps(!!this._overlapsOn, pairs);
+        }
+      };
+    });
+
+
+    
     // Recenter button
     $('#recenterBtn').onclick = () => this.viewer?.recenter();
+
+    // Verifier connectors toggle (toolbar)
+    const verifierBtn = document.getElementById('verifierBtn');
+    if (verifierBtn) {
+      verifierBtn.onclick = () => {
+        if (!Array.isArray(this._edgesAdd) || !this._edgesAdd.length) return;
+
+        this._verifierOn = !this._verifierOn;
+        verifierBtn.classList.toggle('active', this._verifierOn);
+        verifierBtn.setAttribute('aria-pressed', String(this._verifierOn));
+        verifierBtn.textContent = this._verifierOn ? 'Hide connectors' : 'Show connectors';
+
+        const getCenter = (id) => this.viewer?.getNodeCenterById(id);
+        this.viewer?.setVerifierEdges(this._verifierOn, this._edgesAdd, getCenter);
+
+        // keep overlaps highlight layered
+        const pairs = this._openHouse?.data?.validation?.volume_overlaps?.pairs || [];
+        this.viewer?.setHighlightOverlaps(!!this._overlapsOn, pairs);
+      };
+    }
   }
 
   _dnd() {
@@ -1027,40 +1643,162 @@ class App {
     }).join('');
   }
 
-  openViewer(house) {
-    this._openHouse = house;
-    this._buildRoomsList(house);
-    $('#viewerModal').classList.remove('hidden');
-    $('#closeModal').onclick = () => $('#viewerModal').classList.add('hidden');
-    document.addEventListener('keydown', function escOnce(e){
-      if (e.key === 'Escape') { $('#viewerModal').classList.add('hidden'); document.removeEventListener('keydown', escOnce); }
-    }, { once: true });
+ openViewer(house) {
+  this._openHouse = house;
+  this.metricsPerNode = house?.data?.networkx_analysis?.per_node || null;
+  this._buildRoomsList(house);
 
-    if (!this.viewer) this.viewer = new SceneView($('#viewerCanvas'));
+  $('#viewerModal').classList.remove('hidden');
+  $('#closeModal').onclick = () => $('#viewerModal').classList.add('hidden');
+  document.addEventListener('keydown', function escOnce(e){
+    if (e.key === 'Escape') {
+      $('#viewerModal').classList.add('hidden');
+      document.removeEventListener('keydown', escOnce);
+    }
+  }, { once: true });
 
-    // Ensure correct canvas size, then render & fit…
+  if (!this.viewer) this.viewer = new SceneView($('#viewerCanvas'));
+  this._ensureViewerNav();
+
+  // Ensure correct canvas size, then render & fit…
+  this.viewer._resize();
+  this._renderViewer(house);          // calls fit3D/fitPlan + saveState
+
+  // …and one more pass next frame after layout settles
+  requestAnimationFrame(() => {
     this.viewer._resize();
-    this._renderViewer(house);          // calls fit3D/fitPlan + saveState
+    this.viewer.recenter();           // back to that saved fit state
+  });
 
-    // …and one more pass next frame after layout settles
-    requestAnimationFrame(() => {
-      this.viewer._resize();
-      this.viewer.recenter();           // back to that saved fit state
-    });
+  // ==== SIDEBAR (Tabbed) ====
+  const m = $('#viewerMeta');
+  const d = house.data || {};
+  const r = parseReason(d.reason || '');
 
-    // ==== SIDEBAR ====
-    const m = $('#viewerMeta');
-    const d = house.data || {};
-    const r = parseReason(d.reason || '');
+  const entry = d.entry_strategy || {};
+  const anchor = Array.isArray(entry.anchor_point)
+    ? `[${entry.anchor_point.join(', ')}]` : null;
 
-    const entry = d.entry_strategy || {};
-    const anchor = Array.isArray(entry.anchor_point)
-      ? `[${entry.anchor_point.join(', ')}]` : null;
+  // Small local helpers to build tab panes
+  const renderSiteAnalysis = (text='') => {
+    if (!text || !String(text).trim()) return '';
+    return `
+      <div class="tab-pane" data-pane="site">
+        <h4>Site analysis</h4>
+        <p class="small">${esc(text)}</p>
+      </div>
+    `;
+  };
 
-    m.innerHTML = `
+  const renderGraphVerifier = (gv) => {
+    if (!gv) return '';
+    const badge = (v) => {
+      const cls = v === 'ok' ? 'badge-ok' : v === 'fail' ? 'badge-fail' : 'badge-warn';
+      const label = v === 'ok' ? 'OK' : v === 'fail' ? 'Fail' : 'Warn';
+      return `<span class="badge ${cls}">${label}</span>`;
+    };
+
+    const findings = Array.isArray(gv.key_findings) ? gv.key_findings.map(f => {
+      const mtr = f?.evidence?.metrics || {};
+      const idHtml = f.id && f.id !== 'global'
+        ? `<button class="link-like" data-node-link="${esc(f.id)}" title="Highlight in view">${esc(f.id)}</button>`
+        : `<span class="mono">${esc(f.id || 'global')}</span>`;
+      return `
+        <li class="finding">
+          <div class="finding-head">
+            <strong>${idHtml}</strong>
+            <span class="badge ${f.severity === 'high' ? 'badge-fail' : f.severity === 'med' ? 'badge-warn' : 'badge-ok'}">${esc(f.severity || '')}</span>
+          </div>
+          <div class="finding-issue">${esc(f.issue || '')}</div>
+          ${f.why_it_matters ? `<div class="finding-why small muted">${esc(f.why_it_matters)}</div>` : ''}
+
+          ${Object.keys(mtr).length ? `
+            <div class="kv-grid mono">
+              ${Object.entries(mtr).map(([k,v]) => `<div class="kv"><label>${esc(k)}</label><span>${esc(v)}</span></div>`).join('')}
+            </div>` : ''}
+
+          ${f.evidence?.topology ? `<div class="small">Topology: ${esc(f.evidence.topology)}</div>` : ''}
+          ${f.evidence?.use_implication ? `<div class="small">Use: ${esc(f.evidence.use_implication)}</div>` : ''}
+        </li>
+      `;
+    }).join('') : '';
+
+    const suggestions = Array.isArray(gv.suggestions) ? gv.suggestions.map(s => {
+      const d2 = s.details || {};
+      const fx = s.expected_effect || {};
+      const md = fx.metrics_direction || {};
+      return `
+        <li class="suggestion">
+          <div class="suggestion-head">
+            <span class="badge badge-info mono">${esc(s.action || 'change')}</span>
+            ${d2.from_node ? `<span class="mono">${esc(d2.from_node)}</span>` : ''} 
+            ${d2.to_node ? `→ <span class="mono">${esc(d2.to_node)}</span>` : ''}
+            ${Number.isFinite(s.priority) ? `<span class="badge badge-pri">P${s.priority}</span>` : ''}
+          </div>
+          ${fx.spatial ? `<div class="small muted">${esc(fx.spatial)}</div>` : ''}
+
+          ${Object.keys(md).length ? `
+            <div class="kv-grid mono">
+              ${Object.entries(md).map(([k,v]) => `<div class="kv"><label>${esc(k)}</label><span>${esc(v)}</span></div>`).join('')}
+            </div>` : ''}
+        </li>
+      `;
+    }).join('') : '';
+
+    const kpis = gv.kpi_summary || {};
+    const met = Array.isArray(kpis.targets_met) && kpis.targets_met.length
+      ? `<div class="pill-row">${kpis.targets_met.map(t=>`<span class="pill pill-ok">${esc(t)}</span>`).join('')}</div>` : '';
+    const missed = Array.isArray(kpis.targets_missed) && kpis.targets_missed.length
+      ? `<div class="pill-row">${kpis.targets_missed.map(t=>`<span class="pill pill-warn">${esc(t)}</span>`).join('')}</div>` : '';
+
+    const edgesAdd = gv?.patch?.edges_add;
+    const edgesUI = Array.isArray(edgesAdd) && edgesAdd.length ? `
+      <div class="subsec">
+        <label>Proposed connectors</label>
+        <div class="pill-row">
+          ${edgesAdd.map(([a,b])=>`<span class="pill pill-warn">${esc(a)} → ${esc(b)}</span>`).join('')}
+        </div>
+        <div style="margin-top:8px;">
+          <button id="btnVerifierEdges" class="link-like" aria-pressed="false">Show suggested connectors</button>
+        </div>
+        <p class="muted small" style="margin-top:6px;">Draws proposed edges as thick dashed red connectors. Visual only—doesn't modify your JSON.</p>
+      </div>
+    ` : '';
+
+    return `
+      <div class="tab-pane" data-pane="verifier">
+        <div class="verdict">${badge(gv.verdict || 'warn')}<span class="mono">Graph Verifier</span></div>
+        ${gv.parti_summary ? `<p class="small">${esc(gv.parti_summary)}</p>` : ''}
+
+        ${findings ? `
+          <div class="subsec">
+            <h5>Key findings</h5>
+            <ul class="list">${findings}</ul>
+          </div>` : ''}
+
+        ${suggestions ? `
+          <div class="subsec">
+            <h5>Suggestions</h5>
+            <ul class="list">${suggestions}</ul>
+          </div>` : ''}
+
+        ${(met || missed) ? `
+          <div class="subsec">
+            <h5>KPIs</h5>
+            ${met}
+            ${missed}
+          </div>` : ''}
+
+        ${edgesUI}
+        ${gv.notes ? `<p class="small muted">${esc(gv.notes)}</p>` : ''}
+      </div>
+    `;
+  };
+
+  // Info pane = your existing meta (kept intact)
+  const infoPane = `
+    <div class="tab-pane active" data-pane="info">
       <h3>${esc(house.name || d.name || '—')}</h3>
-
-      
 
       <div class="stats-cards">
         <div class="stat"><div class="stat-n">${house.rooms}</div><div class="stat-l">Rooms</div></div>
@@ -1075,7 +1813,6 @@ class App {
         ${kv('Users', d.users)}
         ${kv('Location', d.location)}
         ${kv('Climate', d.climate)}
-        
       </div>
 
       <div class="section">
@@ -1116,8 +1853,99 @@ class App {
             <ul>${r.assumptions_list.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>
           </div>` : ''}
       </details>` : ''}
-    `;
+    </div>
+  `;
+
+  const sitePane = renderSiteAnalysis(d.site_analysisVLM || '');
+  const verifierPane = renderGraphVerifier(d.graph_verifier || null);
+
+  // Tabs header (only include tabs that have content)
+  const tabs = [
+    { id:'info',     label:'Info'    , has:true },
+    { id:'site',     label:'Site'    , has: !!sitePane },
+    { id:'verifier', label:'Verifier', has: !!verifierPane }
+  ].filter(t => t.has);
+
+  m.innerHTML = `
+    <div class="tabs">
+      <div class="tab-head" role="tablist" aria-label="Details">
+        ${tabs.map((t,i)=>`
+          <button class="tab ${i===0?'active':''}" role="tab" data-tab="${t.id}" aria-selected="${i===0?'true':'false'}">
+            ${esc(t.label)}
+          </button>
+        `).join('')}
+      </div>
+      <div class="tab-body">
+        ${infoPane}
+        ${sitePane}
+        ${verifierPane}
+      </div>
+    </div>
+  `;
+
+  // Tab switching
+  m.querySelectorAll('.tab-head .tab').forEach(btn => {
+    btn.onclick = () => {
+      const target = btn.dataset.tab;
+      m.querySelectorAll('.tab-head .tab').forEach(b=>{
+        b.classList.toggle('active', b===btn);
+        b.setAttribute('aria-selected', b===btn ? 'true' : 'false');
+      });
+      m.querySelectorAll('.tab-pane').forEach(p=>{
+        p.classList.toggle('active', p.dataset.pane === target);
+      });
+    };
+  });
+
+  // Click a node label in Verifier → select & zoom
+  m.querySelectorAll('[data-node-link]').forEach(b=>{
+    b.onclick = () => {
+      const id = b.getAttribute('data-node-link');
+      this.viewer?.selectNode(id, true);
+    };
+  });
+
+  // Verifier "show connectors" toggle (only if edges_add exists)
+  const btnVC = m.querySelector('#btnVerifierEdges');
+  const edgesAdd = d.graph_verifier?.patch?.edges_add || [];
+  if (btnVC && edgesAdd.length) {
+    this._verifierOn = !!this._verifierOn; // persist across openings
+    // initialize button state text
+    btnVC.textContent = this._verifierOn ? 'Hide suggested connectors' : 'Show suggested connectors';
+    btnVC.setAttribute('aria-pressed', String(this._verifierOn));
+
+    // apply current state
+    const getCenter = (id) => this.viewer?.getNodeCenterById(id);
+    this.viewer?.setVerifierEdges(this._verifierOn, edgesAdd, getCenter);
+
+    btnVC.onclick = () => {
+      this._verifierOn = !this._verifierOn;
+      btnVC.setAttribute('aria-pressed', String(this._verifierOn));
+      btnVC.textContent = this._verifierOn ? 'Hide suggested connectors' : 'Show suggested connectors';
+      this.viewer?.setVerifierEdges(this._verifierOn, edgesAdd, getCenter);
+
+      // keep overlaps highlight on top if you want
+      const pairs = d?.validation?.volume_overlaps?.pairs || [];
+      this.viewer?.setHighlightOverlaps(!!this._overlapsOn, pairs);
+    };
   }
+  // show chip only if there are suggestions
+  const vb = document.getElementById('verifierBtn');
+  if (vb) {
+    const hasEdges = Array.isArray(this._edgesAdd) && this._edgesAdd.length > 0;
+    vb.style.display = hasEdges ? '' : 'none';
+
+    // keep label and pressed state in sync when opening
+    vb.textContent = this._verifierOn ? 'Hide connectors' : 'Show connectors';
+    vb.setAttribute('aria-pressed', String(!!this._verifierOn));
+
+    // if already on (persisted), re-apply them for the new render
+    if (hasEdges) {
+      const getCenter = (id) => this.viewer?.getNodeCenterById(id);
+      this.viewer?.setVerifierEdges(!!this._verifierOn, this._edgesAdd, getCenter);
+    }
+  }
+}
 
   _renderViewer(house) {
     const view = this.viewer;
@@ -1143,7 +1971,65 @@ class App {
   }
 
   if (this.privacyMode) view.setColorByPrivacy(true);
+
+  // metric (overrides above if set)
+  if (this.metric && this.metricsPerNode) {
+    this.viewer.setColorByMetric(this.metric, this.metricsPerNode);
   }
+
+  if (this._overlapsOn) {
+    const pairs = house.data?.validation?.volume_overlaps?.pairs || [];
+    this.viewer.setHighlightOverlaps(true, pairs);
+  }const pairs = house.data?.validation?.volume_overlaps?.pairs || [];
+    this.viewer.setHighlightOverlaps(!!this._overlapsOn, pairs);
+
+  // re-apply suggested connectors after changing view mode or re-render
+  if (this._verifierOn && Array.isArray(this._edgesAdd) && this._edgesAdd.length) {
+    const getCenter = (id) => this.viewer?.getNodeCenterById(id);
+    this.viewer?.setVerifierEdges(true, this._edgesAdd, getCenter);
+  }
+    }
+
+  _ensureViewerNav() {
+  // host container near the canvas
+  const host = document.querySelector('#viewerCanvas')?.closest('.gl-wrap')
+            || document.querySelector('#viewerCanvas')?.parentElement;
+  if (!host || this._navEl) return;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'viewer-nav';
+  wrap.innerHTML = `
+    <button id="viewerPrev" aria-label="Previous (←)" title="Previous (←)">‹</button>
+    <button id="viewerNext" aria-label="Next (→)"     title="Next (→)">›</button>
+  `;
+  host.appendChild(wrap);
+  this._navEl = wrap;
+
+  wrap.querySelector('#viewerPrev').addEventListener('click', () => this._nav(-1));
+  wrap.querySelector('#viewerNext').addEventListener('click', () => this._nav(+1));
+
+  // keyboard: only when modal is open
+  window.addEventListener('keydown', (e) => {
+    const modalOpen = !document.getElementById('viewerModal')?.classList.contains('hidden');
+    if (!modalOpen) return;
+    if (e.key === 'ArrowLeft')  { e.preventDefault(); this._nav(-1); }
+    if (e.key === 'ArrowRight') { e.preventDefault(); this._nav(+1); }
+  });
+}
+_nav(dir) {
+  if (!this.filtered?.length) return;
+  // find current index in the *filtered* list
+  let i = this.filtered.findIndex(h => h.id === this._openHouse?.id);
+  if (i < 0) i = 0;
+
+  // wrap-around
+  const n = this.filtered.length;
+  const next = (i + dir + n) % n;
+
+  // open
+  this.openViewer(this.filtered[next]);
+}
+  
 }
 
 /* --------------------------- Boot --------------------------- */

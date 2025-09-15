@@ -58,7 +58,7 @@ body {
 
 /* SINGLE, merged rule */
 .modal-content{
-  width: min(1800px, 92vw);
+  width: min(2000px, 98vw);
   height: calc(100vh - 190px); /* keep this or switch to calc(...) — pick one */
   background: var(--panel);
   border: 1px solid var(--border);
@@ -83,7 +83,7 @@ body {
 /* Viewer fills available space; toolbar sits under it */
 .viewer{
   display: grid;
-  grid-template-columns: 300px 1fr 360px; /* 3D | meta */
+  grid-template-columns: 400px 1fr 460px;  /* 3D | meta */
   gap: 16px;
   flex: 1 1 auto;   /* grow to fill modal-content */
   min-height: 0;    /* allow children to shrink */
@@ -123,7 +123,8 @@ body {
 
 /* Right sidebar */
 #viewerMeta{
-  padding: 12px;
+  padding: 15px;
+  line-height: 1.5;
   border-left: 1px solid var(--border);
   overflow: auto;
   color: var(--muted);
@@ -198,21 +199,21 @@ body {
 
 .rooms .ri{ min-width:0; }
 .rooms .ri-top{
-  font-size:13px; font-weight:600;
+  font-size:14px; 
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
 .rooms .ri-sub{
-  font-size:12px; color:var(--muted);
+  font-size:13px; color:var(--muted);
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
 
 /* top row can hold a privacy badge on the right */
-.rooms .ri-top{
+/* .rooms .ri-top{
   display:flex;
   align-items:center;
   justify-content:space-between;
   gap:8px;
-}
+} */
 
 /* privacy badge */
 .rooms .badge{
@@ -225,21 +226,25 @@ body {
   opacity:.9;
 }
 .rooms .badge-privacy.private{      background:#ffecee; color:#a32638; }
-.rooms .badge-privacy.semi_private{ background:#fff6e5; color:#8a5a00; }
+.rooms .badge-privacy.semi_private{ background:#fff6e5; color:#b47501; }
 .rooms .badge-privacy.public{       background:#e9f7ff; color:#0b5e7a; }
 .rooms .badge-privacy.unspecified{  background:rgba(255,255,255,.06); color:var(--muted); }
 
 /* numbers look better for dimensions/heights */
-.rooms .mono{ font-variant-numeric: tabular-nums; }
+.rooms .mono {
+  font-variant-numeric: tabular-nums;
+  font-size: 14px;
+  line-height:1.50;
+}
 
 /* two-line clamp for unique features */
 .rooms .ri-note{
-  font-size:12px;
-  opacity:.85;
-  line-height:1.25;
-  display:-webkit-box;
+  font-size:14px;
+  opacity:.9;
+  line-height:1.50;
+  display:-webkit-box; 
   -webkit-line-clamp: 2;
-  line-clamp: 2; /* Standard property for compatibility */
+  line-clamp: 2;
   -webkit-box-orient:vertical;
   overflow:hidden;
 }
@@ -250,6 +255,78 @@ body {
   outline-offset:2px;
   border-radius:10px;
 }
+
+/* ---- Tabs (right sidebar) ---- */
+.tabs{display:flex;flex-direction:column;gap:8px}
+.tab-head{display:flex;gap:6px;align-items:center;position:sticky;top:0;
+  background:var(--panel-bg, #0f1115);padding:4px 0 6px;z-index:1}
+
+/* if you want chip-like tabs, keep both classes: .chip.tab */
+.tab-head .tab{appearance:none;border:0;border-radius:999px;cursor:pointer;
+  padding:6px 10px;font:inherit;line-height:1;
+  background:var(--chip-bg,#171a21);color:var(--text-2,#b7bec8);opacity:.85}
+.tab-head .tab:hover{opacity:1}
+.tab-head .tab.active{background:var(--chip-active-bg,#232834);
+  color:var(--text-1,#e6ecf3);opacity:1}
+
+.tab-body{position:relative}
+.tab-pane{display:none}
+.tab-pane.active{display:block}
+
+/* small helpers used in the Verifier */
+.badge{display:inline-block;padding:2px 6px;border-radius:6px;font-size:11px;line-height:1}
+.badge-ok{background:#163a2a;color:#9ff0c0}
+.badge-warn{background:#3d2e12;color:#ffd58a}
+.badge-fail{background:#3c161b;color:#ff9ca8}
+.badge-info{background:#1a2d46;color:#9fd0ff}
+.badge-pri{background:#2a2438;color:#d0b7ff}
+.pill-row{display:flex;flex-wrap:wrap;gap:6px}
+.pill{padding:2px 8px;border-radius:999px;background:#1a1f2b;color:#cbd5e1;font-size:11px}
+.pill-ok{background:#0f2a1f;color:#86efac}
+.pill-warn{background:#2a2112;color:#fde68a}
+.list{display:flex;flex-direction:column;gap:10px;margin:0;padding:0;list-style:none}
+.kv-grid{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin-top:6px}
+.kv-grid .kv label{opacity:.7}
+.link-like{background:none;border:0;color:#86b7ff;cursor:pointer;padding:0}
+.link-like:hover{text-decoration:underline}
+
+/* ---- North arrow widget ---- */
+.north-widget{
+  position:absolute;
+  left:12px; bottom:12px;              /* move to top-right if you prefer */
+  width:64px; height:64px;
+  border-radius:10px;
+  background: color-mix(in srgb, #000 12%, transparent);
+  box-shadow: 0 2px 8px rgba(0,0,0,.25);
+  display:grid; place-items:center;
+}
+.north-widget .north-svg{
+  color:#ff2a55;                        /* arrow + ring color */
+  width:56px; height:56px;
+}
+.north-widget svg{ width:100%; height:100%; display:block; }
+
+/* ——— Viewer prev/next arrows ——— */
+.viewer-nav{
+  position:absolute;
+  inset:0;                 /* cover the canvas area */
+  pointer-events:none;     /* let scene get clicks except on buttons */
+  z-index:3;               /* above canvas/labels */
+}
+.viewer-nav button{
+  position:absolute;
+  top:50%;
+  transform:translateY(-50%);
+  width:44px; height:44px;
+  border:0; border-radius:9999px;
+  background:rgba(255,255,255,.95);
+  box-shadow:0 2px 8px rgba(0,0,0,.18);
+  color:#111; font:700 22px/1 system-ui,sans-serif;
+  cursor:pointer; pointer-events:auto;
+}
+#viewerPrev{ left:10px; }
+#viewerNext{ right:10px; }
+.viewer-nav button:focus{ outline:2px solid #5b9cff; outline-offset:2px; }
 
 /* ——— Pills / tags ——— */
 .pill-row{

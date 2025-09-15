@@ -7,13 +7,13 @@
   <link rel="stylesheet" href="./styles.css"/>
 
   <script type="importmap">
-  {
-    "imports": {
-      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-      "three/examples/jsm/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      }
     }
-  }
-  </script>
+    </script>
   <!-- (optional perf) -->
   <!-- <link rel="modulepreload" href="https://unpkg.com/three@0.160.0/build/three.module.js"> -->
 </head>
@@ -83,6 +83,15 @@
         <button class="chip" data-vmode="graph" aria-pressed="false">Graph</button>
         <button id="recenterBtn" class="chip" aria-pressed="false" title="Recenter (F or double-click)">Recenter</button>
         <button id="privacyBtn" class="chip" aria-pressed="false" title="Color by privacy">Privacy</button>
+        <button id="overlapBtn" class="chip" aria-pressed="false" title="Highlight volume overlaps">Overlaps</button>
+
+        <button class="chip metricBtn" data-metric="betweenness_choice"     aria-pressed="false" title="Color by betweenness (choice): reveals choke points / connectors in circulation">Betweenness</button>
+        <button class="chip metricBtn" data-metric="degree"                 aria-pressed="false" title="Color by node degree: highlights hubs vs. secluded rooms | Red=High Degree">Degree</button>
+        <button class="chip metricBtn" data-metric="integration_closeness"  aria-pressed="false" title="Color by integration (closeness): globally accessible, socially central spaces">Integration</button>
+        <!-- <button class="chip metricBtn" data-metric="depth_from_entry"       aria-pressed="false" title="Color by depth from entry (lower = closer to entry; reads public→private sequence)">Depth</button> -->
+        <!-- <button id="verifierBtn" class="chip" aria-pressed="false" title="Show graph-verifier suggested connectors">
+          Verifier connectors
+        </button>      -->
 
       </div>
     </div>
