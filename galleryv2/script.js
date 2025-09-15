@@ -40,7 +40,7 @@ const XY = 1;
 const LEVEL_RISE = 3;
 const BG = 0xffffff;
 const EDGECOLOR = 0x000000;
-const FIT3D_PAD = 0.75;   // tweak to taste; 0.85..1.20
+const FIT3D_PAD = 0.95;   // tweak to taste; 0.85..1.20
 const FIT3D_ELEV = 0.80;  // vertical raise factor (was 0.8)
 const HIGHLIGHT = 0xff00ff;
 
