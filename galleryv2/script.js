@@ -36,7 +36,7 @@ function parseReason(s = '') {
 /* ----------------------------------------------- */
 
 /* --------------------------- Config --------------------------- */
-const XY = 0.3;
+const XY = 1;
 const LEVEL_RISE = 3;
 const BG = 0xffffff;
 const EDGECOLOR = 0x000000;
@@ -44,12 +44,39 @@ const FIT3D_PAD = 0.75;   // tweak to taste; 0.85..1.20
 const FIT3D_ELEV = 0.80;  // vertical raise factor (was 0.8)
 const HIGHLIGHT = 0xff00ff;
 
+const PRIVACY_COLORS = {
+  private:      0xff6b6b,     // red-ish
+  semi_private: 0xf5a623,     // orange
+  public:       0x667eea,     // indigo/blue
+  default:      0x667eea
+};
+const privacyColor = (n) =>
+  new THREE.Color(PRIVACY_COLORS[n?.privacy_level] ?? PRIVACY_COLORS.default);
+
 const nodeColor = (n) => new THREE.Color(
   n.color ||
   (n.privacy_level === 'private' ? '#ff6b6b' :
    n.privacy_level === 'semi_private' ? '#f5a623' : '#667eea')
 );
+/* ------------------------ Thumbnail cache ------------------------ */
+function parseModelsFromFilename(fname='') {
+  // drop extension
+  const base = String(fname).replace(/\.[^.]+$/,'');
+  const parts = base.split('_');
 
+  // remove trailing all-numeric tokens (date/time like 20250915, 023722, etc.)
+  while (parts.length && /^[0-9]+$/.test(parts[parts.length - 1])) parts.pop();
+
+  // last two tokens now should be: ... <VLM> <LLM>
+  const llm = parts.pop() || null;     // e.g. "gpt-5"
+  const vlm = parts.pop() || null;     // e.g. "gpt-4o"
+
+  const looksModel = s => !!s && /[a-zA-Z]/.test(s);
+  return {
+    vlm: looksModel(vlm) ? vlm : null,
+    llm: looksModel(llm) ? llm : null
+  };
+}
 /* ------------------------ Node labels ------------------------ */
 function makeLabel(text) {
   const el = document.createElement('div');
@@ -131,27 +158,51 @@ function buildGraphOnly(scene, data, register) {
 }
 
 /* ------------------------ View builders ------------------------ */
-function buildPlan(scene, data) {
+function buildPlan(scene, data, register) {
   const disposables = [];
-  for (const n of data.nodes || []) {
+
+  for (const n of (data.nodes || [])) {
     const w = num(n.width?.[0] ?? n.width ?? n.size?.[0], 4) * XY;
     const d = num(n.width?.[1] ?? n.depth ?? n.size?.[1], 4) * XY;
-    const x = num(n.center?.[0],0)*XY;
-    const z = num(n.center?.[1],0)*XY;
+    const x = num(n.center?.[0], 0) * XY;
+    const z = num(n.center?.[1], 0) * XY;
 
-    const g = new THREE.PlaneGeometry(Math.max(w,0.02), Math.max(d,0.02));
-    g.rotateX(-Math.PI/2);
-    const m = new THREE.MeshBasicMaterial({ color: nodeColor(n), transparent: true, opacity: 0.28 });
-    const mesh = new THREE.Mesh(g,m);
+    // filled rectangle (plan)
+    const g = new THREE.PlaneGeometry(Math.max(w, 0.02), Math.max(d, 0.02));
+    g.rotateX(-Math.PI / 2);
+    const m = new THREE.MeshBasicMaterial({
+      color: nodeColor(n),
+      transparent: true,
+      opacity: 0.28,
+      depthWrite: false,            // helps avoid z-fighting
+    });
+    const mesh = new THREE.Mesh(g, m);
     mesh.position.set(x, 0.001, z);
     scene.add(mesh); disposables.push(mesh);
 
-  const e = new THREE.EdgesGeometry(new THREE.BoxGeometry(w, 0.01, d));
-  const ol = new THREE.LineSegments(e, new THREE.LineBasicMaterial({ color: EDGECOLOR, opacity: .5, transparent: true }));
+    // outline
+    const eg = new THREE.EdgesGeometry(new THREE.BoxGeometry(
+      Math.max(w, 0.02), 0.01, Math.max(d, 0.02)
+    ));
+    const ol = new THREE.LineSegments(eg, new THREE.LineBasicMaterial({
+      color: EDGECOLOR,
+      transparent: true,
+      opacity: 0.5,
+      depthWrite: false,            // outline stays crisp
+    }));
     ol.position.set(x, 0.001, z);
     scene.add(ol); disposables.push(ol);
+
+    // register once per node (so select/highlight works in Plan mode too)
+    if (register) {
+      const center = new THREE.Vector3(x, 0.001, z);
+      register(n.id, 'mesh', mesh, center, n);
+      register(n.id, 'edge', ol, center);
+    }
   }
-  disposables.push(...buildGraphOverlay(scene, data, 0));
+
+  // add graph overlay ONCE (outside the loop)
+  disposables.push(...buildGraphOverlay(scene, data, 0, register));
   return disposables;
 }
 
@@ -182,7 +233,7 @@ function buildVolumes(scene, data, pickables, register) {
     scene.add(edges); disposables.push(edges);
     const center = new THREE.Vector3(x,y,z);
     if (register) {
-      register(n.id, 'mesh', box, center);
+      register(n.id, 'mesh', box, center, n);   // <-- pass node 'n' so colors.base/priv get stored
       register(n.id, 'edge', edges, center);
 }
   }
@@ -222,6 +273,7 @@ function buildWireframe(scene, data, pickables, register) {
     if (register) {
       // wireframe has no solid mesh; use edge as highlight target
       register(n.id, 'edge', edge, center);
+      register(n.id, 'mesh', plate, center, n);
     }
 
     if (pickables) {
@@ -294,7 +346,10 @@ class SceneView {
 
     this.camera = new THREE.PerspectiveCamera(60, this._aspect(), 0.1, 3000);
     this.camera.position.set(20, 20, 20);
-
+    // Rhino-ish lens
+    this.camera.filmGauge = 36;      // mm (full-frame)
+    this.camera.setFocalLength(50);  // try 40–55 for taste
+    this.camera.updateProjectionMatrix();
     // Controls attach to renderer DOM
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this._setControlsDefaults();
@@ -485,6 +540,11 @@ _animate() {
       this.camera = new THREE.PerspectiveCamera(60, this._aspect(), 0.1, 3000);
       this.controls.object = this.camera;
       this._setControlsDefaults();
+
+      // reapply lens every time we make a new perspective camera
+      this.camera.filmGauge = 36;
+      this.camera.setFocalLength(50);
+      this.camera.updateProjectionMatrix();
     }
 
     const fov = (this.camera.fov * Math.PI) / 180;
@@ -550,19 +610,29 @@ _animate() {
 
   createRegistrar(){
   this.roomIndex.clear();
-  return (id, kind, obj, centerVec) => {
+  return (id, kind, obj, centerVec, node) => {
     if (!id) return;
     let rec = this.roomIndex.get(id);
     if (!rec){
-      rec = { meshes:[], edges:[], labels:[], center: centerVec ? centerVec.clone() : null };
+      rec = { meshes:[], edges:[], labels:[], center: centerVec ? centerVec.clone() : null, colors: null };
       this.roomIndex.set(id, rec);
     }
     if (centerVec && !rec.center) rec.center = centerVec.clone();
+
+    // save colors once per node
+    if (!rec.colors && node){
+      const base = (obj?.material?.color)
+        ? obj.material.color.clone()       // whatever we actually drew
+        : new THREE.Color(node.color || 0x667eea);
+      const priv = privacyColor(node);
+      rec.colors = { base, priv };
+    }
+
     if (kind === 'mesh')  rec.meshes.push(obj);
     if (kind === 'edge')  rec.edges.push(obj);
     if (kind === 'label') rec.labels.push(obj);
-    };
-  }
+  };
+}
 
   selectNode(id, zoom = false){
   this.selectedId = id;
@@ -633,6 +703,20 @@ _animate() {
     }
     $$('#viewerRooms .room-item').forEach(b => b.classList.remove('active'));
   }
+
+  setColorByPrivacy(flag){
+  this.colorByPrivacy = !!flag;
+  for (const [, rec] of this.roomIndex){
+    const col = this.colorByPrivacy ? rec.colors?.priv : rec.colors?.base;
+    if (!col) continue;
+    rec.meshes.forEach(m=>{
+      if (m.material?.color) {
+        m.material.color.copy(col);
+        m.material.needsUpdate = true;
+      }
+    });
+  }
+}
 
 }
 
@@ -740,6 +824,33 @@ class App {
       };
     });
 
+    // Mode chips: only those with data-vmode
+    $$('.viewer-toolbar .chip[data-vmode]').forEach(btn => {
+      btn.onclick = () => {
+        $$('.viewer-toolbar .chip[data-vmode]').forEach(x => {
+          x.classList.remove('active'); x.setAttribute('aria-pressed','false');
+        });
+        btn.classList.add('active'); btn.setAttribute('aria-pressed','true');
+        this.viewerMode = btn.dataset.vmode;
+        if (this._openHouse) {
+          this._renderViewer(this._openHouse);
+          if (this.privacyMode) view.setColorByPrivacy(true); // reapply after re-render
+        }
+      };
+    });
+
+    // Privacy toggle (separate)
+    this.privacyMode = false;
+    const privacyBtn = $('#privacyBtn');
+    if (privacyBtn) {
+      privacyBtn.onclick = () => {
+        this.privacyMode = !this.privacyMode;
+        privacyBtn.classList.toggle('active', this.privacyMode);
+        privacyBtn.setAttribute('aria-pressed', String(this.privacyMode));
+        this.viewer?.setColorByPrivacy(this.privacyMode);
+      };
+    }
+
     // Recenter button
     $('#recenterBtn').onclick = () => this.viewer?.recenter();
   }
@@ -796,6 +907,7 @@ class App {
       rooms: nodes.length,
       floors: Number.isFinite(data?.floors) ? data.floors : 1,
       edges: edges.length,
+      models: parseModelsFromFilename(filename),   // <-- add this
       data: { ...data, nodes, edges }
     });
   }
@@ -838,47 +950,81 @@ class App {
   }
 
   _card(h) {
-    const el = document.createElement('div');
-    el.className = 'card';
-    const thumbURL = this.thumb.render(h.data, this.previewMode);
-    el.innerHTML = `
-      <img class="thumb" src="${thumbURL}" alt="${esc(h.name)}"/>
-      <div class="info">
-        <div class="name" title="${esc(h.name)}">${esc(h.name)}</div>
-        <div class="meta">
-          <span>Rooms ${h.rooms}</span>
-          <span>${h.floors}F</span>
-          <span>${h.edges} edges</span>
-        </div>
-        <div class="meta"><span>${esc(h.location)}</span></div>
+  const el = document.createElement('div');
+  el.className = 'card';
+  const thumbURL = this.thumb.render(h.data, this.previewMode);
+  const users = h.data?.users; // e.g. "7 members (2 adults + 3 children + 2 elders)"
+
+  el.innerHTML = `
+    <img class="thumb" src="${thumbURL}" alt="${esc(h.name)}"/>
+    <div class="info">
+      <div class="name" title="${esc(h.name)}">${esc(h.name)}</div>
+
+      <div class="meta">
+        <span>Rooms ${h.rooms}</span>
+        <span>${h.floors}F</span>
+        <span>${h.edges} edges</span>
       </div>
-    `;
-    el.onclick = () => this.openViewer(h);
-    return el;
-  }
+
+      <div class="meta"><span>${esc(h.location)}</span></div>
+
+      ${users ? `<div class="meta"><span title="${esc(users)}">${esc(users)}</span></div>` : ''}
+
+      ${(h.models?.vlm || h.models?.llm) ? `
+        <div class="meta">
+          ${h.models?.vlm ? `<span>VLM ${esc(h.models.vlm)}</span>` : ''}
+          ${h.models?.llm ? `<span>LLM ${esc(h.models.llm)}</span>` : ''}
+        </div>` : ''
+      }
+    </div>
+  `;
+  el.onclick = () => this.openViewer(h);
+  return el;
+}
 
   _buildRoomsList(house){
-  const el = $('#viewerRooms');
-  if (!el) return;
+    const el = $('#viewerRooms');
+    if (!el) return;
 
-  const nodes = (house.data?.nodes || [])
-    .slice()
-    .sort((a,b)=> (a.floor??0)-(b.floor??0) || String(a.id).localeCompare(String(b.id)));
+    const nodes = (house.data?.nodes || [])
+      .slice()
+      .sort((a,b)=> (a.floor??0)-(b.floor??0) || String(a.id).localeCompare(String(b.id)));
 
-  el.innerHTML = nodes.map(n=>{
-    const color = nodeColor(n).getStyle(); // e.g. "rgb(102, 126, 234)"
-    const title = n.id ?? n.type ?? 'room';
-    const sub   = `F${n.floor ?? 0} · ${n.type ?? 'room'}`;
-    
-    return `
-      <button class="room-item" data-node="${esc(n.id)}" title="${esc(title)}">
-        <span class="dot" style="--c:${esc(color)}"></span>
-        <div class="ri">
-          <div class="ri-top">${esc(title)}</div>
-          <div class="ri-sub">${esc(sub)}</div>
-        </div>
-      </button>`;
-  }).join('');
+    el.innerHTML = nodes.map(n=>{
+      const color = nodeColor(n).getStyle();
+      const title = n.name ?? n.id ?? n.type ?? 'room';
+      const floor = n.floor ?? 0;
+
+      const w = num(n.width?.[0] ?? n.width ?? n.size?.[0], 0);
+      const d = num(n.width?.[1] ?? n.depth ?? n.size?.[1], 0);
+      const h = num(n.height ?? n.room_height, 0);
+
+      const dims = (w && d) ? `${w.toFixed(1)}×${d.toFixed(1)}m` : '';
+      const htxt = h ? ` · H${h.toFixed(1)}m` : '';
+
+      const privRaw = (n.privacy_level || 'unspecified');
+      const priv    = privRaw.replace(/_/g,' ');
+      const feat    = n.unique_features || '';
+
+      const tooltip = `${title}
+  Floor: ${floor}
+  ${dims}${htxt}
+  Privacy: ${priv}
+  ${feat ? `Features: ${feat}` : ''}`;
+
+      return `
+        <button class="room-item" data-node="${esc(n.id)}" title="${esc(tooltip)}">
+          <span class="dot" style="--c:${esc(color)}"></span>
+          <div class="ri">
+            <div class="ri-top">
+              <span class="ri-name">${esc(title)}</span>
+              <span class="badge badge-privacy ${esc(privRaw)}">${esc(priv)}</span>
+            </div>
+            <div class="ri-sub mono">F${floor}${dims ? ` · ${esc(dims)}` : ''}${htxt}</div>
+            ${feat ? `<div class="ri-note">${esc(feat)}</div>` : ''}
+          </div>
+        </button>`;
+    }).join('');
   }
 
   openViewer(house) {
@@ -981,7 +1127,7 @@ class App {
     const reg = view.createRegistrar();        // get a registrar function
 
     if (this.viewerMode === 'plan') {
-    buildPlan(view.scene, house.data);       // plan doesn't need highlight registration
+    buildPlan(view.scene, house.data, reg);       // plan doesn't need highlight registration
     view.fitPlan(house.data);
   } else if (this.viewerMode === 'wireframe') {
     buildWireframe(view.scene, house.data, view.pickables, reg);
@@ -995,6 +1141,8 @@ class App {
     buildGraphOverlay(view.scene, house.data, null, reg); // (optional) labels/graph
     view.fit3D(house.data);
   }
+
+  if (this.privacyMode) view.setColorByPrivacy(true);
   }
 }
 

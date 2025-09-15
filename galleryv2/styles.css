@@ -206,6 +206,51 @@ body {
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
 
+/* top row can hold a privacy badge on the right */
+.rooms .ri-top{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+}
+
+/* privacy badge */
+.rooms .badge{
+  font-size:11px;
+  padding:2px 6px;
+  border-radius:999px;
+  border:1px solid var(--border);
+  line-height:1;
+  white-space:nowrap;
+  opacity:.9;
+}
+.rooms .badge-privacy.private{      background:#ffecee; color:#a32638; }
+.rooms .badge-privacy.semi_private{ background:#fff6e5; color:#8a5a00; }
+.rooms .badge-privacy.public{       background:#e9f7ff; color:#0b5e7a; }
+.rooms .badge-privacy.unspecified{  background:rgba(255,255,255,.06); color:var(--muted); }
+
+/* numbers look better for dimensions/heights */
+.rooms .mono{ font-variant-numeric: tabular-nums; }
+
+/* two-line clamp for unique features */
+.rooms .ri-note{
+  font-size:12px;
+  opacity:.85;
+  line-height:1.25;
+  display:-webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2; /* Standard property for compatibility */
+  -webkit-box-orient:vertical;
+  overflow:hidden;
+}
+
+/* keyboard focus */
+.rooms .room-item:focus-visible{
+  outline:2px solid #7aa9ff;
+  outline-offset:2px;
+  border-radius:10px;
+}
+
 /* ——— Pills / tags ——— */
 .pill-row{
   display:flex; flex-wrap:wrap; gap:6px; margin:4px 0 10px;
