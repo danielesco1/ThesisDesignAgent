@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
+import { planWalkPathViaEdges, Walkthrough, findEntryNodeId, attachWalkHUD } from './walkthrough.js';
+
 /* --------------------------- Helpers --------------------------- */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
@@ -141,9 +143,11 @@ const LEVEL_RISE = 3;
 const BG = 0xffffff;
 const EDGECOLOR = 0x000000;
 const FIT3D_PAD = 0.90;   // tweak to taste; 0.85..1.20
-const FIT3D_ELEV = 0.80;  // vertical raise factor (was 0.8)
+const FIT3D_ELEV = 0.01;  // vertical raise factor (was 0.8)
 const FIT_TIGHT = 0.60; 
 const HIGHLIGHT = 0xff00ff;
+
+const focalLengthMm = 35; // wider: 24–35, normal: 40–55
 
 const PRIVACY_COLORS = {
   private:      0xff6b6b,     // red-ish
@@ -362,7 +366,7 @@ function buildWireframe(scene, data, pickables, register) {
     const geometry = new THREE.BoxGeometry(Math.max(w,.05), Math.max(h,.05), Math.max(d,.05));
     const edge = new THREE.LineSegments(
       new THREE.EdgesGeometry(geometry),
-      new THREE.LineBasicMaterial({ color: EDGECOLOR, transparent: true, opacity: 1.0 })
+      new THREE.LineBasicMaterial({ color: EDGECOLOR, transparent: false, opacity: 1.0 })
     );
     edge.position.set(x,y,z);
     scene.add(edge); disposables.push(edge);
@@ -372,7 +376,7 @@ function buildWireframe(scene, data, pickables, register) {
     plateG.rotateX(-Math.PI/2);
     const plate = new THREE.Mesh(
       plateG,
-      new THREE.MeshBasicMaterial({ color: nodeColor(n), transparent: true, opacity: .7, depthWrite: false })
+      new THREE.MeshBasicMaterial({ color: nodeColor(n), transparent: false, opacity: 1.0, depthWrite: true })
     );
     plate.position.set(x, yBottom + 0.002, z);
 
@@ -458,7 +462,7 @@ class SceneView {
     this.camera.position.set(20, 20, 20);
     // Rhino-ish lens
     this.camera.filmGauge = 36;      // mm (full-frame)
-    this.camera.setFocalLength(50);  // try 40–55 for taste
+    this.camera.setFocalLength(focalLengthMm);  // try 40–55 for taste
     this.camera.updateProjectionMatrix();
     // Controls attach to renderer DOM
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
@@ -539,7 +543,7 @@ class SceneView {
 
   c.minDistance = 0.5;
   c.maxDistance = 500;
-  c.maxPolarAngle = Math.PI / 2.05;
+  c.maxPolarAngle = Math.PI / 0.02;
 }
 
 _initLabelRenderer() {
@@ -669,7 +673,7 @@ _animate() {
 
       // reapply lens every time we make a new perspective camera
       this.camera.filmGauge = 36;
-      this.camera.setFocalLength(50);
+      this.camera.setFocalLength(focalLengthMm);
       this.camera.updateProjectionMatrix();
     }
 
@@ -1481,6 +1485,11 @@ if (overlapBtn){
         this.viewer?.setHighlightOverlaps(!!this._overlapsOn, pairs);
       };
     }
+
+    const walkBtn = document.getElementById('walkBtn');
+      if (walkBtn) walkBtn.onclick = () => this.toggleWalkthrough();
+
+
   }
 
   _dnd() {
@@ -1662,15 +1671,23 @@ if (overlapBtn){
 
   $('#viewerModal').classList.remove('hidden');
   $('#closeModal').onclick = () => $('#viewerModal').classList.add('hidden');
-  document.addEventListener('keydown', function escOnce(e){
+  document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       $('#viewerModal').classList.add('hidden');
-      document.removeEventListener('keydown', escOnce);
+      if (this._walker) {
+        this._walker.stop();
+        this._walker = null;
+        this._setWalkBtn(false);
+      }
+      this._hud?.hide();
+            // Handler ran once; no need to remove because we didn't add { once:true } here.
     }
   }, { once: true });
 
   if (!this.viewer) this.viewer = new SceneView($('#viewerCanvas'));
   this._ensureViewerNav();
+
+  if (!this._hud) this._hud = attachWalkHUD(this.viewer);
 
   // Ensure correct canvas size, then render & fit…
   this.viewer._resize();
@@ -2018,9 +2035,12 @@ if (overlapBtn){
 
   if (this._overlapsOn) {
     const pairs = house.data?.validation?.volume_overlaps?.pairs || [];
-    this.viewer.setHighlightOverlaps(true, pairs);
-  }const pairs = house.data?.validation?.volume_overlaps?.pairs || [];
+    this.viewer.setHighlightOverlaps(true, pairs);}
+  {
+    const pairs = house.data?.validation?.volume_overlaps?.pairs || [];
     this.viewer.setHighlightOverlaps(!!this._overlapsOn, pairs);
+  }
+
 
   // re-apply suggested connectors after changing view mode or re-render
   if (this._verifierOn && Array.isArray(this._edgesAdd) && this._edgesAdd.length) {
@@ -2067,6 +2087,88 @@ _nav(dir) {
 
   // open
   this.openViewer(this.filtered[next]);
+}
+
+_setWalkBtn(running) {
+  const b = document.getElementById('walkBtn');
+  if (!b) return;
+  b.classList.toggle('active', !!running);
+  b.setAttribute('aria-pressed', String(!!running));
+  b.textContent = running ? 'Stop Walkthrough' : 'Walkthrough';
+}
+
+toggleWalkthrough() {
+  if (this._walker && this._walker.isRunning?.()) {
+    this._walker.stop();
+    this._walker = null;
+    this._setWalkBtn(false);
+    this._hud?.hide(); 
+    return;
+  }
+  // Not running → start with your preferred speed
+  this.startHouseWalkthrough(1.0);
+}
+
+_setListActive(id) {
+  $$('#viewerRooms .room-item').forEach(b => {
+    b.classList.toggle('active', b.dataset.node === id);
+  });
+}
+
+startHouseWalkthrough(speed = 1.8) {
+  if (!this._openHouse || !this.viewer) return;
+
+  // Ensure 3D mode
+  if (this.viewerMode === 'plan') {
+    this.viewerMode = 'volumes';
+    this._renderViewer(this._openHouse);
+  }
+
+  const data = this._openHouse.data;
+  const entryId = findEntryNodeId(data);
+
+  // NEW: build path that strictly follows edges (DFS walk)
+  const { points, order, centers } = planWalkPathViaEdges(data, {
+        entryId,
+        entryGlideDist: 8,   // tweak your outside glide distance here
+      });
+  if (!points.length) return;
+
+  // Stop previous run
+  if (this._walker) { this._walker.stop(); this._walker = null; }
+
+  const perRoomDwell = data?.walkthrough?.per_room_dwell || null;
+
+  this._walker = new Walkthrough(this.viewer, points, {
+    speed,
+    lookAhead: 1.4,
+    loop: false,
+    roomOrder: order,
+    roomCenters: centers,
+    dwellSec: 3.0,
+    slowRadius: 2.5,
+    slowFactor: 0.2,
+    resumeBoost: 1.25,
+    postBoostMs: 650,
+    maxYawRate: 120,
+    perRoomDwell,
+    onRoomEnter: (id) => {
+      if (!id) return;
+      // this.viewer.selectNode(id, false);
+      // ✅ just reflect state in the list
+      this._setListActive?.(id);
+      const el = document.querySelector(`.room-item[data-node="${CSS.escape(id)}"]`);
+      el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+
+      // HUD
+      const node = this._openHouse?.data?.nodes?.find(n => n.id === id);
+      this._hud?.show(id, node);
+    }
+  });
+
+  // if you wired the toggle UI:
+  this._setWalkBtn?.(true);
+  this._walker.start();
 }
   
 }
